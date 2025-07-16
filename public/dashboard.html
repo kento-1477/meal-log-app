@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食事記録ダッシュボード</title>
+    <link rel="stylesheet" href="style.css"> <!-- 既存のスタイルシートを流用 -->
+    <style>
+        #dashboard-container {
+            width: 100%;
+            max-width: 1200px; /* 幅を広げる */
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .meal-image {
+            max-width: 100px;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        /* モーダル関連のスタイル */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto; /* 15% from the top and centered */
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%; /* Could be more or less, depending on screen size */
+            max-width: 500px;
+            border-radius: 10px;
+            position: relative;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="number"] {
+            width: calc(100% - 22px); /* Padding and border */
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .form-actions {
+            text-align: right;
+        }
+        .form-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-left: 10px;
+        }
+        .form-actions #save-edit-button {
+            background-color: #007aff;
+            color: white;
+        }
+        .form-actions #cancel-edit-button {
+            background-color: #ccc;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="dashboard-container">
+        <h1>食事記録ダッシュボード</h1>
+        <div class="top-bar">
+            <a href="/" class="nav-button">💬 チャットに戻る</a>
+        </div>
+        <div id="data-table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>料理名</th>
+                        <th>タンパク質(g)</th>
+                        <th>脂質(g)</th>
+                        <th>炭水化物(g)</th>
+                        <th>カロリー(kcal)</th>
+                        <th>画像</th>
+                        <th>メモ</th>
+                        <th>操作</th> <!-- 新しい列 -->
+                    </tr>
+                </thead>
+                <tbody id="meal-data-body">
+                    <!-- データがここに挿入されます -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 編集モーダル -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>記録を編集</h2>
+            <form id="edit-form">
+                <input type="hidden" id="edit-timestamp"> <!-- タイムスタンプを隠しフィールドとして保持 -->
+                <div class="form-group">
+                    <label for="edit-mealName">料理名:</label>
+                    <input type="text" id="edit-mealName">
+                </div>
+                <div class="form-group">
+                    <label for="edit-protein">タンパク質(g):</label>
+                    <input type="number" id="edit-protein">
+                </div>
+                <div class="form-group">
+                    <label for="edit-fat">脂質(g):</label>
+                    <input type="number" id="edit-fat">
+                </div>
+                <div class="form-group">
+                    <label for="edit-carbs">炭水化物(g):</label>
+                    <input type="number" id="edit-carbs">
+                </div>
+                <div class="form-group">
+                    <label for="edit-calories">カロリー(kcal):</label>
+                    <input type="number" id="edit-calories">
+                </div>
+                <div class="form-group">
+                    <label for="edit-memo">メモ:</label>
+                    <input type="text" id="edit-memo">
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="cancel-edit-button">キャンセル</button>
+                    <button type="submit" id="save-edit-button">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

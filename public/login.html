@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - 食事記録アプリ</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>食事記録アプリ</h1>
+        
+        <div id="auth-container">
+            <!-- ログインフォーム -->
+            <form id="login-form">
+                <h2>ログイン</h2>
+                <div id="login-error" class="error-message"></div>
+                <input type="email" id="login-email" placeholder="メールアドレス" required>
+                <input type="password" id="login-password" placeholder="パスワード" required>
+                <button type="submit">ログイン</button>
+            </form>
+
+            <hr>
+
+            <!-- 新規登録フォーム -->
+            <form id="register-form">
+                <h2>新規登録</h2>
+                <div id="register-error" class="error-message"></div>
+                <input type="email" id="register-email" placeholder="メールアドレス" required>
+                <input type="password" id="register-password" placeholder="パスワード" required>
+                <button type="submit">登録</button>
+            </form>
+        </div>
+
+    </div>
+
+    <script src="login.js"></script>
+</body>
+</html>

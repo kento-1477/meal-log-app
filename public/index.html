@@ -1,0 +1,25 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食事記録ボット</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="chat-container">
+        <div class="top-bar">
+            <a href="/dashboard" class="nav-button">📊 ダッシュボードを見る</a>
+        </div>
+        <div id="chat-box"></div>
+        <div id="input-area">
+            <input type="text" id="text-input" placeholder="メッセージを入力...">
+            <input type="file" id="image-input" accept="image/*" style="display: none;">
+            <button id="image-button">🖼️</button>
+            <button id="send-button">送信</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
