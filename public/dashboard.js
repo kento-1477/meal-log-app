@@ -25,15 +25,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             data.forEach(meal => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${meal['日時'] || ''}</td>
-                    <td>${meal['料理名'] || ''}</td>
-                    <td>${meal['タンパク質(g)'] || ''}</td>
-                    <td>${meal['脂質(g)'] || ''}</td>
-                    <td>${meal['炭水化物(g)'] || ''}</td>
-                    <td>${meal['カロリー(kcal)'] || ''}</td>
-                    <td>${meal['画像パス'] ? `<img src="/${meal['画像パス']}" class="meal-image">` : ''}</td>
-                    <td>${meal['メモ'] || ''}</td>
-                    <td><button class="edit-button" data-timestamp="${meal['日時']}">編集</button></td>
+                    <td>${meal.timestamp || ''}</td>
+                    <td>${meal.mealName || ''}</td>
+                    <td>${meal.protein || ''}</td>
+                    <td>${meal.fat || ''}</td>
+                    <td>${meal.carbs || ''}</td>
+                    <td>${meal.calories || ''}</td>
+                    <td>${meal.imagePath ? `<img src="/${meal.imagePath}" class="meal-image">` : ''}</td>
+                    <td>${meal.memo || ''}</td>
+                    <td><button class="edit-button" data-id="${meal.id}">編集</button></td>
                 `;
                 mealDataBody.appendChild(row);
             });
@@ -41,17 +41,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 編集ボタンのイベントリスナーを設定
             document.querySelectorAll('.edit-button').forEach(button => {
                 button.addEventListener('click', (event) => {
-                    const timestamp = event.target.dataset.timestamp;
-                    currentEditingRow = data.find(meal => meal['日時'] === timestamp); // 編集対象のデータを特定
+                    const id = parseInt(event.target.dataset.id); // IDを数値に変換
+                    currentEditingRow = data.find(meal => meal.id === id); // 編集対象のデータを特定
                     if (currentEditingRow) {
                         // フォームにデータをセット
-                        document.getElementById('edit-timestamp').value = currentEditingRow['日時'];
-                        document.getElementById('edit-mealName').value = currentEditingRow['料理名'];
-                        document.getElementById('edit-protein').value = currentEditingRow['タンパク質(g)'];
-                        document.getElementById('edit-fat').value = currentEditingRow['脂質(g)'];
-                        document.getElementById('edit-carbs').value = currentEditingRow['炭水化物(g)'];
-                        document.getElementById('edit-calories').value = currentEditingRow['カロリー(kcal)'];
-                        document.getElementById('edit-memo').value = currentEditingRow['メモ'];
+                        document.getElementById('edit-timestamp').value = currentEditingRow.timestamp;
+                        document.getElementById('edit-mealName').value = currentEditingRow.mealName;
+                        document.getElementById('edit-protein').value = currentEditingRow.protein;
+                        document.getElementById('edit-fat').value = currentEditingRow.fat;
+                        document.getElementById('edit-carbs').value = currentEditingRow.carbs;
+                        document.getElementById('edit-calories').value = currentEditingRow.calories;
+                        document.getElementById('edit-memo').value = currentEditingRow.memo;
                         editModal.style.display = 'block'; // モーダルを表示
                     }
                 });
@@ -81,6 +81,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         event.preventDefault(); // フォームのデフォルト送信を防止
 
         const updatedData = {
+            id: currentEditingRow.id, // レコードIDを追加
             timestamp: document.getElementById('edit-timestamp').value,
             mealName: document.getElementById('edit-mealName').value,
             protein: document.getElementById('edit-protein').value,
@@ -88,7 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             carbs: document.getElementById('edit-carbs').value,
             calories: document.getElementById('edit-calories').value,
             memo: document.getElementById('edit-memo').value,
-            imagePath: currentEditingRow['画像パス'] // 画像パスは変更しない
+            imagePath: currentEditingRow.imagePath // 画像パスは変更しない
         };
 
         try {

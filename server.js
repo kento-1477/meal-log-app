@@ -5,7 +5,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+
 const axios = require('axios');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
@@ -18,11 +18,12 @@ const app = express();
 const port = 3000;
 
 // --- Google Gemini API設定 ---
-const API_KEY = process.env.GOOGLE_API_KEY;
+// 環境変数からAPIキーを読み込みます。読み込めない場合は空文字になり、エラーを防ぎます。
+const API_KEY = process.env.GEMINI_API_KEY?.trim() || ''; 
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
 // --- 基本設定 ---
-app.use(express.static('public'));
+
 app.use('/uploads', express.static('uploads'));
 app.use(express.json()); // JSONボディをパースするために必要
 app.use(express.urlencoded({ extended: true })); // for form data
@@ -40,7 +41,7 @@ app.use(passport.session());
 
 // --- PostgreSQL接続設定 ---
 const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
+    user: process.env.DB_USER,
     host: process.env.DB_HOST || 'localhost',
     database: process.env.DB_NAME || 'meal_log_db',
     password: process.env.DB_PASSWORD || 'your_password', // ここは必ず実際のパスワードに置き換えてください
@@ -95,39 +96,88 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- CSVファイル設定 ---
-const CSV_HEADERS_IDS = [
-    {id: 'timestamp', title: '日時'},
-    {id: 'mealName', title: '料理名'},
-    {id: 'protein', title: 'タンパク質(g)'},
-    {id: 'fat', title: '脂質(g)'},
-    {id: 'carbs', title: '炭水化物(g)'},
-    {id: 'calories', title: 'カロリー(kcal)'},
-    {id: 'imagePath', title: '画像パス'},
-    {id: 'memo', title: 'メモ'}
-];
-
-const CSV_HEADERS_TITLES = CSV_HEADERS_IDS.map(h => h.title);
-const EXPECTED_CSV_HEADER_LINE = CSV_HEADERS_IDS.map(h => `"${h.title}"`).join(',');
-
-const csvPath = './data/meal_log.csv';
-const csvWriter = createCsvWriter({
-    path: csvPath,
-    header: CSV_HEADERS_IDS,
-    append: true,
-    alwaysQuote: true,
-});
-
-// CSVヘッダーがなければ書き込む
-async function ensureCsvHeader() {
-    if (!fs.existsSync(csvPath) || fs.readFileSync(csvPath, 'utf8').trim().split('\n')[0] !== EXPECTED_CSV_HEADER_LINE) {
-        const headerWriter = createCsvWriter({ path: csvPath, header: CSV_HEADERS_IDS });
-        await headerWriter.writeRecords([]);
+// --- PostgreSQLデータ操作関数 ---
+async function getMealLogs(userId) {
+    try {
+        const result = await pool.query('SELECT * FROM meal_logs WHERE user_id = $1 ORDER BY timestamp DESC', [userId]);
+        return result.rows.map(row => ({
+            timestamp: new Date(row.timestamp).toLocaleString('ja-JP'),
+            mealName: row.meal_name,
+            protein: row.protein,
+            fat: row.fat,
+            carbs: row.carbs,
+            calories: row.calories,
+            imagePath: row.image_path,
+            memo: row.memo,
+            id: row.id // レコードを一意に識別するためのID
+        }));
+    } catch (error) {
+        console.error('Error fetching meal logs from PostgreSQL:', error);
+        return [];
     }
 }
 
-// アプリ起動時にヘッダーを保証
-ensureCsvHeader();
+async function addMealLog(userId, record) {
+    try {
+        const query = `INSERT INTO meal_logs (user_id, timestamp, meal_name, protein, fat, carbs, calories, image_path, memo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`;
+        const values = [
+            userId,
+            record.timestamp,
+            record.mealName,
+            record.protein,
+            record.fat,
+            record.carbs,
+            record.calories,
+            record.imagePath,
+            record.memo
+        ];
+        const result = await pool.query(query, values);
+        return result.rows[0].id; // 挿入されたレコードのIDを返す
+    } catch (error) {
+        console.error('Error adding meal log to PostgreSQL:', error);
+        throw error;
+    }
+}
+
+async function updateMealLog(userId, recordId, updates) {
+    try {
+        const fields = [];
+        const values = [];
+        let paramIndex = 1;
+
+        for (const key in updates) {
+            if (updates.hasOwnProperty(key)) {
+                fields.push(`${key} = ${paramIndex++}`);
+                values.push(updates[key]);
+            }
+        }
+
+        if (fields.length === 0) {
+            return { rowCount: 0 }; // 更新するフィールドがない場合
+        }
+
+        values.push(recordId);
+        values.push(userId);
+
+        const query = `UPDATE meal_logs SET ${fields.join(', ')} WHERE id = ${paramIndex++} AND user_id = ${paramIndex++}`;
+        const result = await pool.query(query, values);
+        return result;
+    } catch (error) {
+        console.error('Error updating meal log in PostgreSQL:', error);
+        throw error;
+    }
+}
+
+async function deleteMealLog(userId, recordId) {
+    try {
+        const query = 'DELETE FROM meal_logs WHERE id = $1 AND user_id = $2';
+        const result = await pool.query(query, [recordId, userId]);
+        return result;
+    } catch (error) {
+        console.error('Error deleting meal log from PostgreSQL:', error);
+        throw error;
+    }
+}
 
 // --- AIへの指示書（プロンプト）---
 const PROMPTS = {
@@ -140,121 +190,77 @@ const PROMPTS = {
 };
 
 // --- 待機関数 ---
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// --- AI呼び出し関数 (rewritten with retry) ---
 async function callGemini(prompt, userText = '', imageFile = null, retries = 3) {
-  const userParts = [];
-
-  // プロンプトとユーザーテキストを結合して一つのテキストパートにする
-  let combinedText = prompt;
-  if (userText) {
-    combinedText += `\n\nユーザー入力: ${userText}`;
-  }
-  userParts.push({ text: combinedText });
-
-  if (imageFile) {
-    const imgBuf = fs.readFileSync(imageFile.path);
-    userParts.push({
-      inline_data: {
-        mime_type: imageFile.mimetype,
-        data: imgBuf.toString('base64')
-      }
-    });
-  }
-
-  for (let i = 0; i < retries; i++) {
-    try {
-      console.log(`Sending request to Gemini API (Attempt ${i + 1}/${retries})...`);
-      // 最初の試行以外は待機
-      if (i > 0) {
-        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000; // 指数バックオフ + ランダムジッター
-        console.log(`Waiting for ${delay / 1000} seconds before retrying...`);
-        await sleep(delay);
-      }
-
-      const response = await axios.post(API_URL, { contents: [{ role: 'user', parts: userParts }] });
-      const rawText = response.data.candidates[0].content.parts.map(p => p.text).join('');
-
-      // JSONを抽出する試み
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-          return jsonMatch[0]; // JSONが見つかった場合はJSON文字列を返す
-      } else {
-          // JSONが見つからない場合は生のテキストを返す
-          console.log('No JSON found in response. Returning raw text:', rawText);
-          return rawText;
-      }
-    } catch (err) {
-      console.error('Gemini API error', err.response?.data || err.message);
-      // 429 (Too Many Requests) または 503 (Service Unavailable) の場合はリトライ
-      if (err.response && (err.response.status === 429 || err.response.status === 503)) {
-        console.warn('Retrying due to API rate limit or service unavailability...');
-        continue; // ループを続行してリトライ
-      } else {
-        // その他のエラーの場合はリトライせず終了
+    // APIキーが設定されていない場合は、エラーメッセージを出して早期に処理を終了します。
+    if (!API_KEY) {
+        console.error('Gemini APIキーが設定されていません。.envファイルを確認してください。');
         return null;
-      }
     }
-  }
-  console.error('Gemini API: Max retries exceeded.');
-  return null; // 最大リトライ回数を超えた場合
+
+    const userParts = [];
+
+    // プロンプトとユーザーテキストを結合
+    let combinedText = prompt;
+    if (userText) {
+        combinedText += `\n\nユーザー入力: ${userText}`;
+    }
+    userParts.push({ text: combinedText });
+
+    if (imageFile) {
+        const imgBuf = fs.readFileSync(imageFile.path);
+        userParts.push({
+            inline_data: {
+                mime_type: imageFile.mimetype,
+                // ★★★ ここを修正しました ★★★
+                data: imgBuf.toString('base64') 
+            }
+        });
+    }
+
+    for (let i = 0; i < retries; i++) {
+        try {
+            console.log(`Sending request to Gemini API (Attempt ${i + 1}/${retries})...`);
+            if (i > 0) {
+                const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                console.log(`Waiting for ${delay / 1000} seconds before retrying...`);
+                await new Promise(resolve => setTimeout(resolve, delay)); // sleep関数の代わりに直接記述
+            }
+            
+            const response = await axios.post(API_URL, { contents: [{ role: 'user', parts: userParts }] });
+            
+            // レスポンスの存在チェックを追加
+            const rawText = response.data?.candidates?.[0]?.content?.parts?.map(p => p.text).join('');
+            if (!rawText) {
+                console.log('Valid response text not found, retrying...');
+                continue;
+            }
+
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return jsonMatch[0];
+            } else {
+                console.log('No JSON found in response. Returning raw text:', rawText);
+                return rawText;
+            }
+        } catch (err) {
+            console.error('Gemini API error', err.response?.data?.error || err.message); // エラー詳細を表示
+            if (err.response && (err.response.status === 429 || err.response.status === 503)) {
+                console.warn('Retrying due to API rate limit or service unavailability...');
+                continue;
+            } else {
+                return null;
+            }
+        }
+    }
+
+    console.error('Gemini API: Max retries exceeded.');
+    return null;
 }
 
-// --- CSVデータ読み込み関数 (手動パース) ---
-async function readCsvData() {
-    return new Promise((resolve, reject) => {
-        if (!fs.existsSync(csvPath)) {
-            console.log('CSV file does not exist. Returning empty array.');
-            return resolve([]);
-        }
 
-        const fileContent = fs.readFileSync(csvPath, 'utf8');
-        const lines = fileContent.trim().split('\n');
-
-        if (lines.length <= 1) { // ヘッダー行のみ、または空の場合
-            console.log('CSV file has only header or is empty.');
-            return resolve([]);
-        }
-
-        // ヘッダー行をパース
-        const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '')); // クォーテーションを除去
-        const results = [];
-
-        // データ行をパース
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line === '') continue; // 空行をスキップ
-
-            const values = line.split(',').map(v => v.replace(/^"|"$/g, '')); // クォーテーションを除去
-            const row = {};
-            headers.forEach((header, index) => {
-                row[header] = values[index] || '';
-            });
-            results.push(row);
-            console.log('CSV row data (after manual parsing):', row);
-        }
-
-        console.log('CSV read complete. Total rows:', results.length);
-        resolve(results);
-    });
-}
-
-// --- CSVデータ書き込み関数 (更新用) ---
-async function writeCsvData(data) {
-    const writer = createCsvWriter({
-        path: csvPath,
-        header: CSV_HEADERS_IDS,
-        append: false, // 上書きモード
-        alwaysQuote: true,
-    });
-    await writer.writeRecords(data);
-}
 
 // --- ルーティング ---
-app.post('/log', upload.single('image'), async (req, res) => {
+app.post('/log', isAuthenticated, upload.single('image'), async (req, res) => {
     const userInput = req.body.text;
     const imageFile = req.file;
     let reply = 'エラーが発生しました。もう一度お試しください。';
@@ -297,7 +303,7 @@ app.post('/log', upload.single('image'), async (req, res) => {
                         imagePath: imageFile ? imageFile.path : '',
                         memo: userInput
                     };
-                    await csvWriter.writeRecords([record]);
+                    await addMealLog(req.user.id, record);
                     reply = `「${analysis.mealName}」ですね！\n推定カロリー: ${analysis.calories} kcal\nP: ${analysis.protein}g, F: ${analysis.fat}g, C: ${analysis.carbs}g\nとして記録しました。`;
                 } else {
                     reply = '栄養分析ができませんでした。もう少し詳しく教えていただけますか？';
@@ -310,7 +316,7 @@ app.post('/log', upload.single('image'), async (req, res) => {
             reply = 'AIサービスが一時的に利用できません。しばらくしてからもう一度お試しください。';
         }
     } else if (intent === 'analyze_data') {
-        const allData = await readCsvData();
+        const allData = await getMealLogs(req.user.id);
         const csvString = allData.map(row => Object.values(row).join(',')).join('\n');
         
         const analysisPrompt = PROMPTS.analysis_summary
@@ -321,7 +327,7 @@ app.post('/log', upload.single('image'), async (req, res) => {
         reply = await callGemini(analysisPrompt, null, null) || 'データ分析に失敗しました。';
 
     } else if (intent === 'edit_data') {
-        const allData = await readCsvData();
+        const allData = await getMealLogs(req.user.id);
         const csvString = allData.map(row => Object.values(row).join(',')).join('\n');
         const editInstructionRaw = await callGemini(PROMPTS.edit_data.replace('{CSV_DATA}', csvString || 'データがありません。'), userInput, imageFile);
         if (editInstructionRaw) {
@@ -386,7 +392,7 @@ app.post('/log', upload.single('image'), async (req, res) => {
             reply = 'AIサービスが一時的に利用できません。しばらくしてからもう一度お試しください。';
         }
     } else if (intent === 'delete_data') {
-        const allData = await readCsvData();
+        const allData = await getMealLogs(req.user.id);
         const csvString = allData.map(row => Object.values(row).join(',')).join('\n');
         const deleteInstructionRaw = await callGemini(PROMPTS.delete_data.replace('{CSV_DATA}', csvString || 'データがありません。'), userInput, imageFile);
         if (deleteInstructionRaw) {
@@ -448,60 +454,52 @@ app.post('/log', upload.single('image'), async (req, res) => {
 
 // --- 新しいAPIエンドポイントの追加 ---
 app.get('/api/meal-data', async (req, res) => {
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: '認証が必要です。' });
+    }
     try {
-        const data = await readCsvData();
+        const data = await getMealLogs(req.user.id);
         res.json(data);
     } catch (error) {
-        console.error('Error reading CSV data for API:', error);
-        res.status(500).json({ error: 'Failed to retrieve meal data.' });
+        console.error('Error retrieving meal data from PostgreSQL:', error);
+        res.status(500).json({ error: '食事データの取得に失敗しました。' });
     }
 });
 
 // --- データ更新APIエンドポイントの追加 ---
 app.put('/api/meal-data', async (req, res) => {
-    const updatedRecord = req.body; // 更新されたレコードデータ
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: '認証が必要です。' });
+    }
+    const { id, ...updates } = req.body; // レコードIDと更新内容
     try {
-        let allData = await readCsvData();
-        // タイムスタンプをキーにしてレコードを更新
-        allData = allData.map(record => {
-            if (record['日時'] === updatedRecord.timestamp) {
-                return {
-                    '日時': updatedRecord.timestamp,
-                    '料理名': updatedRecord.mealName,
-                    'タンパク質(g)': updatedRecord.protein,
-                    '脂質(g)': updatedRecord.fat,
-                    '炭水化物(g)': updatedRecord.carbs,
-                    'カロリー(kcal)': updatedRecord.calories,
-                    '画像パス': updatedRecord.imagePath || record['画像パス'], // 画像パスは変更しない
-                    'メモ': updatedRecord.memo
-                };
-            } else {
-                return record;
-            }
-        });
-        await writeCsvData(allData); // 更新されたデータをCSVに書き戻す
-        res.status(200).json({ message: '記録が正常に更新されました。' });
+        const result = await updateMealLog(req.user.id, id, updates);
+        if (result.rowCount > 0) {
+            res.status(200).json({ message: '記録が正常に更新されました。' });
+        } else {
+            res.status(404).json({ error: '指定された記録が見つからないか、更新する権限がありません。' });
+        }
     } catch (error) {
-        console.error('Error updating meal record:', error);
+        console.error('Error updating meal record in PostgreSQL:', error);
         res.status(500).json({ error: '記録の更新に失敗しました。' });
     }
 });
 
 // --- データ削除APIエンドポイントの追加 ---
 app.delete('/api/meal-data', async (req, res) => {
-    const timestampToDelete = req.body.timestamp; // 削除対象のタイムスタンプ
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({ error: '認証が必要です。' });
+    }
+    const { id } = req.body; // 削除対象のレコードID
     try {
-        let allData = await readCsvData();
-        const initialLength = allData.length;
-        allData = allData.filter(record => record['日時'] !== timestampToDelete);
-        if (allData.length < initialLength) {
-            await writeCsvData(allData);
+        const result = await deleteMealLog(req.user.id, id);
+        if (result.rowCount > 0) {
             res.status(200).json({ message: '記録が正常に削除されました。' });
         } else {
-            res.status(404).json({ error: '指定された日時の記録が見つかりませんでした。' });
+            res.status(404).json({ error: '指定された記録が見つからないか、削除する権限がありません。' });
         }
     } catch (error) {
-        console.error('Error deleting meal record:', error);
+        console.error('Error deleting meal record from PostgreSQL:', error);
         res.status(500).json({ error: '記録の削除に失敗しました。' });
     }
 });
@@ -526,6 +524,9 @@ app.get('/', isAuthenticated, (req, res) => {
 app.get('/dashboard', isAuthenticated, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
+
+// --- 静的ファイルの提供 ---
+app.use(express.static('public'));
 
 // --- 認証APIエンドポイント ---
 
