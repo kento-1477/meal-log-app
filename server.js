@@ -12,7 +12,7 @@ const LocalStrategy = require('passport-local').Strategy;
 const { Pool } = require('pg');
 
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
 // --- Google Gemini API設定 ---
 // 環境変数からAPIキーを読み込みます。読み込めない場合は空文字になり、エラーを防ぎます。
@@ -345,10 +345,10 @@ app.post('/log', isAuthenticated, upload.single('image'), async (req, res) => {
           const record = {
             timestamp: new Date().toLocaleString('ja-JP'),
             mealName: analysis.mealName || '',
-            protein: analysis.protein || '',
-            fat: analysis.fat || '',
-            carbs: analysis.carbs || '',
-            calories: analysis.calories || '',
+            protein: analysis.protein,
+            fat: analysis.fat,
+            carbs: analysis.carbs,
+            calories: analysis.calories,
             imagePath: imageFile ? imageFile.path : '',
             memo: userInput,
           };
@@ -620,11 +620,9 @@ app.put('/api/meal-data', async (req, res) => {
     if (result.rowCount > 0) {
       res.status(200).json({ message: '記録が正常に更新されました。' });
     } else {
-      res
-        .status(404)
-        .json({
-          error: '指定された記録が見つからないか、更新する権限がありません。',
-        });
+      res.status(404).json({
+        error: '指定された記録が見つからないか、更新する権限がありません。',
+      });
     }
   } catch (error) {
     console.error('Error updating meal record in PostgreSQL:', error);
@@ -643,11 +641,9 @@ app.delete('/api/meal-data', async (req, res) => {
     if (result.rowCount > 0) {
       res.status(200).json({ message: '記録が正常に削除されました。' });
     } else {
-      res
-        .status(404)
-        .json({
-          error: '指定された記録が見つからないか、削除する権限がありません。',
-        });
+      res.status(404).json({
+        error: '指定された記録が見つからないか、削除する権限がありません。',
+      });
     }
   } catch (error) {
     console.error('Error deleting meal record from PostgreSQL:', error);
@@ -736,6 +732,6 @@ app.get('/api/user', isAuthenticated, (req, res) => {
 });
 
 // --- サーバー起動 ---
-app.listen(port, () => {
-  console.log(`食事記録アプリが http://localhost:${port} で起動しました`);
+app.listen(PORT, () => {
+  console.log(`食事記録アプリが http://localhost:${PORT} で起動しました`);
 });
