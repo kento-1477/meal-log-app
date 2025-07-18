@@ -675,6 +675,115 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
 // --- 静的ファイルの提供 ---
 app.use(express.static('public'));
 
+// --- 目標計算APIエンドポイント ---
+app.post('/api/calculate-goals', (req, res) => {
+  const { gender, age, height_cm, weight_kg, activity_level } = req.body;
+
+  // 入力値のバリデーション
+  if (!gender || !age || !height_cm || !weight_kg || !activity_level) {
+    return res.status(400).json({ error: 'すべての項目を入力してください。' });
+  }
+
+  let bmr;
+  if (gender === 'male') {
+    bmr = 88.362 + 13.397 * weight_kg + 4.799 * height_cm - 5.677 * age;
+  } else if (gender === 'female') {
+    bmr = 447.593 + 9.247 * weight_kg + 3.098 * height_cm - 4.33 * age;
+  } else {
+    return res
+      .status(400)
+      .json({ error: '性別は male または female を指定してください。' });
+  }
+
+  const activityMultipliers = {
+    sedentary: 1.2,
+    light: 1.375,
+    moderate: 1.55,
+    active: 1.725,
+  };
+
+  const multiplier = activityMultipliers[activity_level];
+  if (!multiplier) {
+    return res
+      .status(400)
+      .json({ error: '活動レベルの値が正しくありません。' });
+  }
+
+  const tdee = Math.round(bmr * multiplier);
+  const protein = Math.round((tdee * 0.2) / 4);
+  const fat = Math.round((tdee * 0.2) / 9);
+  const carbs = Math.round((tdee * 0.6) / 4);
+
+  res.json({
+    recommended_calories: tdee,
+    recommended_protein: protein,
+    recommended_fat: fat,
+    recommended_carbs: carbs,
+  });
+});
+
+// --- 目標設定保存APIエンドポイント ---
+app.post('/api/save-goals', isAuthenticated, async (req, res) => {
+  const userId = req.user.id;
+  const {
+    gender,
+    age,
+    height_cm,
+    weight_kg,
+    activity_level,
+    target_calories,
+    target_protein,
+    target_fat,
+    target_carbs,
+  } = req.body;
+
+  try {
+    // user_profiles テーブルへの保存（UPSERT）
+    const profileQuery = `
+      INSERT INTO user_profiles (user_id, gender, age, height_cm, weight_kg, activity_level)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id) DO UPDATE SET
+          gender = EXCLUDED.gender,
+          age = EXCLUDED.age,
+          height_cm = EXCLUDED.height_cm,
+          weight_kg = EXCLUDED.weight_kg,
+          activity_level = EXCLUDED.activity_level;
+    `;
+    await pool.query(profileQuery, [
+      userId,
+      gender,
+      age,
+      height_cm,
+      weight_kg,
+      activity_level,
+    ]);
+
+    // user_goals テーブルへの保存（UPSERT）
+    const goalsQuery = `
+      INSERT INTO user_goals (user_id, target_calories, target_protein, target_fat, target_carbs)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id) DO UPDATE SET
+          target_calories = EXCLUDED.target_calories,
+          target_protein = EXCLUDED.target_protein,
+          target_fat = EXCLUDED.target_fat,
+          target_carbs = EXCLUDED.target_carbs,
+          updated_at = CURRENT_TIMESTAMP;
+    `;
+    await pool.query(goalsQuery, [
+      userId,
+      target_calories,
+      target_protein,
+      target_fat,
+      target_carbs,
+    ]);
+
+    res.status(200).json({ message: '目標設定が正常に保存されました。' });
+  } catch (error) {
+    console.error('Error saving goals:', error);
+    res.status(500).json({ error: '目標設定の保存中にエラーが発生しました。' });
+  }
+});
+
 // --- 認証APIエンドポイント ---
 
 // ユーザー登録
