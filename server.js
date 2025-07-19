@@ -196,6 +196,19 @@ async function deleteMealLog(userId, recordId) {
   }
 }
 
+async function hasUserSetGoals(userId) {
+  try {
+    const result = await pool.query(
+      'SELECT 1 FROM user_goals WHERE user_id = $1',
+      [userId],
+    );
+    return result.rows.length > 0;
+  } catch (error) {
+    console.error('Error checking user goals:', error);
+    return false;
+  }
+}
+
 // --- AIへの指示書（プロンプト）---
 const PROMPTS = {
   intent: `あなたの役割: インテント分類器。次の入力例を参考にして\n- 入力:「豚汁とおにぎり半分食べた」 ⇒ {"intent":"log_meal"}\n- 入力:「/report week」               ⇒ {"intent":"analyze_data"}\n- 入力:「今日めちゃ暑いね」          ⇒ {"intent":"chitchat"}\nルール: 上記3種のどれか1つだけ JSON で返す。説明・コードブロック禁止。`,
@@ -596,6 +609,23 @@ app.post('/log', isAuthenticated, upload.single('image'), async (req, res) => {
 });
 
 // --- 新しいAPIエンドポイントの追加 ---
+app.get('/api/goals', isAuthenticated, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT target_calories, target_protein, target_fat, target_carbs FROM user_goals WHERE user_id = $1',
+      [req.user.id],
+    );
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.status(404).json({ error: '目標設定が見つかりません。' });
+    }
+  } catch (error) {
+    console.error('Error fetching user goals:', error);
+    res.status(500).json({ error: '目標設定の取得に失敗しました。' });
+  }
+});
+
 app.get('/api/meal-data', async (req, res) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: '認証が必要です。' });
@@ -664,12 +694,22 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-app.get('/', isAuthenticated, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('/', isAuthenticated, async (req, res) => {
+  const userId = req.user.id;
+  const goalsSet = await hasUserSetGoals(userId);
+  if (goalsSet) {
+    res.sendFile(path.join(__dirname, 'public', 'index.html')); // 目標設定済みならチャット画面へ
+  } else {
+    res.redirect('/goal-setting'); // 目標未設定なら目標設定画面へ
+  }
 });
 
 app.get('/dashboard', isAuthenticated, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+app.get('/goal-setting', isAuthenticated, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'goal-setting.html'));
 });
 
 // --- 静的ファイルの提供 ---
@@ -818,11 +858,14 @@ app.post('/api/register', async (req, res) => {
 });
 
 // ログイン
-app.post('/api/login', passport.authenticate('local'), (req, res) => {
-  res.json({
-    message: 'ログイン成功！',
-    user: { id: req.user.id, email: req.user.email },
-  });
+app.post('/api/login', passport.authenticate('local'), async (req, res) => {
+  const userId = req.user.id;
+  const goalsSet = await hasUserSetGoals(userId);
+  if (goalsSet) {
+    res.json({ message: 'ログイン成功！', redirectTo: '/' }); // 目標設定済みならチャット画面へ
+  } else {
+    res.json({ message: 'ログイン成功！', redirectTo: '/goal-setting' }); // 目標未設定なら目標設定画面へ
+  }
 });
 
 // ログアウト

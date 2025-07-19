@@ -15,6 +15,12 @@
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
+        #goal-setting-container {
+            background-color: lightblue; /* 目標設定コンテナの背景色を一時的に変更 */
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
         h1 {
             text-align: center;
             color: #333;
@@ -115,63 +121,14 @@
     <div id="dashboard-container">
         <h1>食事記録ダッシュボード</h1>
 
-        <div id="goal-setting-container">
-            <h2>目標設定</h2>
-            <form id="profile-form">
-                <div class="form-group">
-                    <label>性別:</label>
-                    <input type="radio" id="male" name="gender" value="male" required>
-                    <label for="male">男性</label>
-                    <input type="radio" id="female" name="gender" value="female" required>
-                    <label for="female">女性</label>
-                </div>
-                <div class="form-group">
-                    <label for="age">年齢:</label>
-                    <input type="number" id="age" name="age" required>
-                </div>
-                <div class="form-group">
-                    <label for="height">身長(cm):</label>
-                    <input type="number" id="height" name="height_cm" required>
-                </div>
-                <div class="form-group">
-                    <label for="weight">体重(kg):</label>
-                    <input type="number" id="weight" name="weight_kg" required>
-                </div>
-                <div class="form-group">
-                    <label for="activity-level">活動レベル:</label>
-                    <select id="activity-level" name="activity_level" required>
-                        <option value="sedentary">ほぼ運動しない</option>
-                        <option value="light">軽い運動</option>
-                        <option value="moderate">中程度の運動</option>
-                        <option value="active">活発な運動</option>
-                    </select>
-                </div>
-                <button type="submit">計算する</button>
-            </form>
-
-            <div id="goal-results-container" style="display: none;">
-                <h3>推奨目標</h3>
-                <form id="goals-form">
-                    <div class="form-group">
-                        <label for="recommended-calories">推奨カロリー(kcal):</label>
-                        <input type="number" id="recommended-calories" name="target_calories">
-                    </div>
-                    <div class="form-group">
-                        <label for="recommended-protein">推奨タンパク質(g):</label>
-                        <input type="number" id="recommended-protein" name="target_protein">
-                    </div>
-                    <div class="form-group">
-                        <label for="recommended-fat">推奨脂質(g):</label>
-                        <input type="number" id="recommended-fat" name="target_fat">
-                    </div>
-                    <div class="form-group">
-                        <label for="recommended-carbs">推奨炭水化物(g):</label>
-                        <input type="number" id="recommended-carbs" name="target_carbs">
-                    </div>
-                    <button type="submit">この目標で設定する</button>
-                </form>
-            </div>
+        <div id="current-goals-display">
+            <h2>現在の目標</h2>
+            <p>目標カロリー: <span id="display-target-calories">--</span> kcal</p>
+            <p>目標PFC: P:<span id="display-target-protein">--</span>g, F:<span id="display-target-fat">--</span>g, C:<span id="display-target-carbs">--</span>g</p>
+            <button id="edit-goals-button">目標を編集</button>
         </div>
+
+        
         <div class="top-bar">
             <a href="/" class="nav-button">💬 チャットに戻る</a>
         </div>

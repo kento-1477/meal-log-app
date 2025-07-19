@@ -124,130 +124,87 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // --- 目標設定機能のJavaScript ---
-  const profileForm = document.getElementById('profile-form');
-  const goalResultsContainer = document.getElementById(
-    'goal-results-container',
-  );
-  const goalsForm = document.getElementById('goals-form');
-
-  // 「計算する」ボタンの処理
-  profileForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-
-    const submitButton = profileForm.querySelector('button[type="submit"]');
-    submitButton.disabled = true; // ボタンを無効化
-    submitButton.textContent = '計算中...'; // テキストを変更
-
-    const gender = document.querySelector('input[name="gender"]:checked').value;
-    const age = parseInt(document.getElementById('age').value);
-    const height_cm = parseFloat(document.getElementById('height').value);
-    const weight_kg = parseFloat(document.getElementById('weight').value);
-    const activity_level = document.getElementById('activity-level').value;
-
+  // --- 目標設定表示機能のJavaScript ---
+  async function fetchGoalsData() {
     try {
-      const response = await fetch('/api/calculate-goals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          gender,
-          age,
-          height_cm,
-          weight_kg,
-          activity_level,
-        }),
-      });
-
+      const response = await fetch('/api/goals');
       if (response.ok) {
         const data = await response.json();
-        document.getElementById('recommended-calories').value =
-          data.recommended_calories;
-        document.getElementById('recommended-protein').value =
-          data.recommended_protein;
-        document.getElementById('recommended-fat').value = data.recommended_fat;
-        document.getElementById('recommended-carbs').value =
-          data.recommended_carbs;
-
-        goalResultsContainer.style.display = 'block'; // 結果表示エリアを表示
+        document.getElementById('display-target-calories').textContent =
+          data.target_calories || '--';
+        document.getElementById('display-target-protein').textContent =
+          data.target_protein || '--';
+        document.getElementById('display-target-fat').textContent =
+          data.target_fat || '--';
+        document.getElementById('display-target-carbs').textContent =
+          data.target_carbs || '--';
+      } else if (response.status === 404) {
+        // 目標設定がまだない場合
+        document.getElementById('display-target-calories').textContent =
+          '未設定';
+        document.getElementById('display-target-protein').textContent =
+          '未設定';
+        document.getElementById('display-target-fat').textContent = '未設定';
+        document.getElementById('display-target-carbs').textContent = '未設定';
       } else {
         const errorData = await response.json();
-        alert(`目標計算に失敗しました: ${errorData.error}`);
+        console.error('Error fetching goals:', errorData.error);
+        alert('目標設定の取得に失敗しました。');
       }
     } catch (error) {
-      console.error('Error calculating goals:', error);
-      alert('目標計算中にエラーが発生しました。');
-    } finally {
-      submitButton.disabled = false; // ボタンを有効化
-      submitButton.textContent = '計算する'; // テキストを元に戻す
+      console.error('Error fetching goals:', error);
+      alert('目標設定の取得中にエラーが発生しました。');
     }
-  });
+  }
 
-  // 「この目標で設定する」ボタンの処理
-  goalsForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-
-    const submitButton = goalsForm.querySelector('button[type="submit"]');
-    submitButton.disabled = true; // ボタンを無効化
-    submitButton.textContent = '保存中...'; // テキストを変更
-
-    // プロフィール情報を取得
-    const gender = document.querySelector('input[name="gender"]:checked').value;
-    const age = parseInt(document.getElementById('age').value);
-    const height_cm = parseFloat(document.getElementById('height').value);
-    const weight_kg = parseFloat(document.getElementById('weight').value);
-    const activity_level = document.getElementById('activity-level').value;
-
-    // 目標値を取得
-    const target_calories = parseInt(
-      document.getElementById('recommended-calories').value,
-    );
-    const target_protein = parseInt(
-      document.getElementById('recommended-protein').value,
-    );
-    const target_fat = parseInt(
-      document.getElementById('recommended-fat').value,
-    );
-    const target_carbs = parseInt(
-      document.getElementById('recommended-carbs').value,
-    );
-
-    try {
-      const response = await fetch('/api/save-goals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          gender,
-          age,
-          height_cm,
-          weight_kg,
-          activity_level,
-          target_calories,
-          target_protein,
-          target_fat,
-          target_carbs,
-        }),
-      });
-
-      if (response.ok) {
-        alert('目標設定が正常に保存されました！');
-        // 必要であれば、保存後に何かUIを更新する処理を追加
-      } else {
-        const errorData = await response.json();
-        alert(`目標設定の保存に失敗しました: ${errorData.error}`);
-      }
-    } catch (error) {
-      console.error('Error saving goals:', error);
-      alert('目標設定の保存中にエラーが発生しました。');
-    } finally {
-      submitButton.disabled = false; // ボタンを有効化
-      submitButton.textContent = 'この目標で設定する'; // テキストを元に戻す
-    }
-  });
+  // 「目標を編集」ボタンのイベントリスナー
+  const editGoalsButton = document.getElementById('edit-goals-button');
+  if (editGoalsButton) {
+    editGoalsButton.addEventListener('click', () => {
+      window.location.href = '/goal-setting';
+    });
+  }
 
   // ページロード時にデータを表示
   loadAndDisplayData();
+  fetchGoalsData(); // 目標データもロード
 });
+
+// 既存の関数はそのまま残す
+function openEditModal(meal) {
+  document.getElementById('edit-timestamp').value = meal.id; // IDをセット
+  document.getElementById('edit-mealName').value = meal.mealName;
+  document.getElementById('edit-protein').value = meal.protein;
+  document.getElementById('edit-fat').value = meal.fat;
+  document.getElementById('edit-carbs').value = meal.carbs;
+  document.getElementById('edit-calories').value = meal.calories;
+  document.getElementById('edit-memo').value = meal.memo;
+  document.getElementById('edit-modal').style.display = 'block';
+}
+
+async function deleteMealRecord(id) {
+  if (!confirm('この記録を削除してもよろしいですか？')) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/meal-data', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ id: id }),
+    });
+
+    if (response.ok) {
+      alert('記録が削除されました！');
+      loadAndDisplayData(); // データを再取得して表示を更新
+    } else {
+      const errorData = await response.json();
+      alert(`削除に失敗しました: ${errorData.error}`);
+    }
+  } catch (error) {
+    console.error('Error deleting meal record:', error);
+    alert('記録の削除中にエラーが発生しました。');
+  }
+}
