@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>詳細分析</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="dashboard-header">
+        <h1>詳細分析</h1>
+        <nav>
+            <a href="dashboard.html" class="nav-button">ホームへ戻る</a>
+        </nav>
+    </div>
+
+    <div class="dashboard-grid-container">
+
+        <!-- 1. カロリー/体重推移グラフ -->
+        <div class="card large-card" id="trends-chart-card">
+            <h3>カロリーと体重の推移</h3>
+            <div class="time-range-filter">
+                <button class="active">週</button>
+                <button>月</button>
+                <button>年</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="trendsLineChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 2. 全食事記録テーブル -->
+        <div class="card large-card" id="full-meal-log-table">
+             <h3>全食事記録</h3>
+             <div class="table-controls">
+                <input type="date" id="date-filter">
+                <button>検索</button>
+             </div>
+             <table>
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>料理名</th>
+                        <th>タンパク質(g)</th>
+                        <th>脂質(g)</th>
+                        <th>炭水化物(g)</th>
+                        <th>カロリー(kcal)</th>
+                        <th>画像</th>
+                        <th>メモ</th>
+                    </tr>
+                </thead>
+                <tbody id="full-meal-data-body">
+                    <!-- 仮データ -->
+                    <tr>
+                        <td>2023-07-19 19:00</td>
+                        <td>ステーキ</td>
+                        <td>50</td>
+                        <td>40</td>
+                        <td>5</td>
+                        <td>600</td>
+                        <td>-</td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>2023-07-19 12:30</td>
+                        <td>鶏胸肉サラダ</td>
+                        <td>40</td>
+                        <td>10</td>
+                        <td>15</td>
+                        <td>350</td>
+                        <td>-</td>
+                        <td></td>
+                    </tr>
+                     <tr>
+                        <td>2023-07-19 08:00</td>
+                        <td>オートミール</td>
+                        <td>10</td>
+                        <td>5</td>
+                        <td>40</td>
+                        <td>250</td>
+                        <td>-</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <script src="analytics.js"></script> <!-- 新しいJSファイル -->
+</body>
+</html>

@@ -3,196 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>食事記録ダッシュボード</title>
-    <link rel="stylesheet" href="style.css"> <!-- 既存のスタイルシートを流用 -->
-    <style>
-        #dashboard-container {
-            width: 100%;
-            max-width: 1200px; /* 幅を広げる */
-            margin: 20px auto;
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        #goal-setting-container {
-            background-color: lightblue; /* 目標設定コンテナの背景色を一時的に変更 */
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-            font-weight: bold;
-        }
-        .meal-image {
-            max-width: 100px;
-            height: auto;
-            display: block;
-            margin: 0 auto;
-        }
-        /* モーダル関連のスタイル */
-        .modal {
-            display: none; /* Hidden by default */
-            position: fixed; /* Stay in place */
-            z-index: 1; /* Sit on top */
-            left: 0;
-            top: 0;
-            width: 100%; /* Full width */
-            height: 100%; /* Full height */
-            overflow: auto; /* Enable scroll if needed */
-            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
-        }
-        .modal-content {
-            background-color: #fefefe;
-            margin: 15% auto; /* 15% from the top and centered */
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%; /* Could be more or less, depending on screen size */
-            max-width: 500px;
-            border-radius: 10px;
-            position: relative;
-        }
-        .close-button {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-        }
-        .close-button:hover,
-        .close-button:focus {
-            color: black;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        .form-group input[type="text"],
-        .form-group input[type="number"] {
-            width: calc(100% - 22px); /* Padding and border */
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-        }
-        .form-actions {
-            text-align: right;
-        }
-        .form-actions button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-left: 10px;
-        }
-        .form-actions #save-edit-button {
-            background-color: #007aff;
-            color: white;
-        }
-        .form-actions #cancel-edit-button {
-            background-color: #ccc;
-            color: #333;
-        }
-    </style>
+    <title>ホーム - 今日の状況</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div id="dashboard-container">
-        <h1>食事記録ダッシュボード</h1>
 
-        <div id="current-goals-display">
-            <h2>現在の目標</h2>
-            <p>目標カロリー: <span id="display-target-calories">--</span> kcal</p>
-            <p>目標PFC: P:<span id="display-target-protein">--</span>g, F:<span id="display-target-fat">--</span>g, C:<span id="display-target-carbs">--</span>g</p>
-            <button id="edit-goals-button">目標を編集</button>
+    <div class="dashboard-header">
+        <h1>ホーム</h1>
+        <nav>
+            <a href="/" class="nav-button">食事記録</a>
+            <a href="analytics.html" class="nav-button secondary">詳細分析へ</a>
+        </nav>
+    </div>
+
+    <div class="dashboard-grid-container">
+
+        <!-- 1. カロリー目標 -->
+        <div class="card" id="calories-tracker">
+            <h3>今日の摂取カロリー</h3>
+            <div class="progress-bar-container">
+                <div class="progress-bar" style="width: 60%;"></div>
+            </div>
+            <p class="kpi-value">1500 / 2500 kcal</p>
+            <div class="goal-edit-link">
+                <a href="goal-setting.html">目標設定</a>
+            </div>
         </div>
 
+        <!-- 2. Combined PFC Card (Normal Width) -->
+        <div class="card" id="pfc-summary-card">
+            <h3>今日のPFCバランス</h3>
+            <div class="pfc-summary-content">
+                <div class="pfc-chart-container">
+                    <canvas id="pfcPieChart"></canvas>
+                </div>
+                <div class="pfc-details-container">
+                    <div class="pfc-details">
+                        <p><span>タンパク質</span> <strong>80 / 120g</strong></p>
+                        <p><span>脂質</span> <strong>60 / 70g</strong></p>
+                        <p><span>炭水化物</span> <strong>150 / 250g</strong></p>
+                    </div>
+                    <div class="goal-edit-link">
+                        <a href="goal-setting.html">目標設定</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. AI Advice -->
+        <div class="card" id="ai-advice-card">
+            <h3>AIアドバイス</h3>
+            <div class="ai-comment">
+                <p>今日は脂質が多いですね。夕食は控えめにしましょう。</p>
+            </div>
+        </div>
+
+        <!-- 4. 食事の質スコア -->
+        <div class="card" id="quality-score">
+            <h3>今日の食事スコア</h3>
+            <p class="score">85<span>/100点</span></p>
+            <p>素晴らしいバランスです！</p>
+        </div>
         
-        <div class="top-bar">
-            <a href="/" class="nav-button">💬 チャットに戻る</a>
+        <!-- 5. リマインダー -->
+        <div class="card" id="reminders">
+            <h3>リマインダー</h3>
+            <p class="notification">🔔 昼食の記録がまだです！</p>
         </div>
-        <div id="data-table-container">
-            <table>
+
+        <!-- 6. 本日の食事記録 -->
+        <div class="card large-card" id="meal-log-table">
+             <h3>本日の食事記録</h3>
+             <table>
                 <thead>
                     <tr>
-                        <th>日時</th>
+                        <th>時間</th>
                         <th>料理名</th>
-                        <th>タンパク質(g)</th>
-                        <th>脂質(g)</th>
-                        <th>炭水化物(g)</th>
-                        <th>カロリー(kcal)</th>
-                        <th>画像</th>
-                        <th>メモ</th>
-                        <th>操作</th> <!-- 新しい列 -->
+                        <th>P(g)</th>
+                        <th>F(g)</th>
+                        <th>C(g)</th>
+                        <th>kcal</th>
                     </tr>
                 </thead>
                 <tbody id="meal-data-body">
-                    <!-- データがここに挿入されます -->
+                    <!-- 仮データ -->
+                    <tr>
+                        <td>08:00</td>
+                        <td>オートミール</td>
+                        <td>10</td>
+                        <td>5</td>
+                        <td>40</td>
+                        <td>250</td>
+                    </tr>
+                    <tr>
+                        <td>12:30</td>
+                        <td>鶏胸肉サラダ</td>
+                        <td>40</td>
+                        <td>10</td>
+                        <td>15</td>
+                        <td>350</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
-    </div>
 
-    <!-- 編集モーダル -->
-    <div id="edit-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <h2>記録を編集</h2>
-            <form id="edit-form">
-                <input type="hidden" id="edit-timestamp"> <!-- タイムスタンプを隠しフィールドとして保持 -->
-                <div class="form-group">
-                    <label for="edit-mealName">料理名:</label>
-                    <input type="text" id="edit-mealName">
-                </div>
-                <div class="form-group">
-                    <label for="edit-protein">タンパク質(g):</label>
-                    <input type="number" id="edit-protein">
-                </div>
-                <div class="form-group">
-                    <label for="edit-fat">脂質(g):</label>
-                    <input type="number" id="edit-fat">
-                </div>
-                <div class="form-group">
-                    <label for="edit-carbs">炭水化物(g):</label>
-                    <input type="number" id="edit-carbs">
-                </div>
-                <div class="form-group">
-                    <label for="edit-calories">カロリー(kcal):</label>
-                    <input type="number" id="edit-calories">
-                </div>
-                <div class="form-group">
-                    <label for="edit-memo">メモ:</label>
-                    <input type="text" id="edit-memo">
-                </div>
-                <div class="form-actions">
-                    <button type="button" id="cancel-edit-button">キャンセル</button>
-                    <button type="submit" id="save-edit-button">保存</button>
-                </div>
-            </form>
-        </div>
     </div>
 
     <script src="dashboard.js"></script>
+    <script>
+        // PFC円グラフのダミー表示
+        const pfcCtx = document.getElementById('pfcPieChart').getContext('2d');
+        new Chart(pfcCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['タンパク質', '脂質', '炭水化物'],
+                datasets: [{
+                    data: [80, 60, 150],
+                    backgroundColor: ['#36A2EB', '#FF6384', '#FFCE56'],
+                    borderWidth: 2
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { 
+                        display: false
+                    }
+                },
+                cutout: '60%'
+            }
+        });
+    </script>
 </body>
 </html>
