@@ -14,6 +14,11 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// --- PostgreSQL接続設定 ---
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
 // --- Google Gemini API設定 ---
 // 環境変数からAPIキーを読み込みます。読み込めない場合は空文字になり、エラーを防ぎます。
 const API_KEY = process.env.GEMINI_API_KEY?.trim() || '';
@@ -24,28 +29,6 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 app.use('/uploads', express.static('uploads'));
 app.use(express.json()); // JSONボディをパースするために必要
 app.use(express.urlencoded({ extended: true })); // for form data
-
-// --- セッション & 認証設定 ---
-app.use(
-  session({
-    secret:
-      process.env.SESSION_SECRET || 'a-secret-key-that-is-long-and-secret', // .envにSESSION_SECRETを設定することを推奨
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false }, // HTTPSでない場合はfalse
-  }),
-);
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-// --- PostgreSQL接続設定 ---
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // RenderなどのクラウドDBではSSL接続が必要な場合が多い
-  },
-});
 
 // --- Passport.js設定 ---
 passport.use(
@@ -858,14 +841,37 @@ app.post('/api/register', async (req, res) => {
 });
 
 // ログイン
-app.post('/api/login', passport.authenticate('local'), async (req, res) => {
-  const userId = req.user.id;
-  const goalsSet = await hasUserSetGoals(userId);
-  if (goalsSet) {
-    res.json({ message: 'ログイン成功！', redirectTo: '/' }); // 目標設定済みならチャット画面へ
-  } else {
-    res.json({ message: 'ログイン成功！', redirectTo: '/goal-setting' }); // 目標未設定なら目標設定画面へ
-  }
+app.post('/api/login', (req, res, next) => {
+  passport.authenticate('local', (err, user, info) => {
+    if (err) {
+      console.error('Passport authentication error:', err);
+      return res
+        .status(500)
+        .json({ error: '認証中にサーバーエラーが発生しました。' });
+    }
+    if (!user) {
+      console.warn('Passport authentication failed:', info.message);
+      return res
+        .status(401)
+        .json({ error: info.message || 'ログインに失敗しました。' });
+    }
+    req.logIn(user, async (err) => {
+      if (err) {
+        console.error('req.logIn error:', err);
+        return res
+          .status(500)
+          .json({ error: 'ログイン処理中にエラーが発生しました。' });
+      }
+      // Original success logic
+      const userId = req.user.id;
+      const goalsSet = await hasUserSetGoals(userId);
+      if (goalsSet) {
+        res.json({ message: 'ログイン成功！', redirectTo: '/' });
+      } else {
+        res.json({ message: 'ログイン成功！', redirectTo: '/goal-setting' });
+      }
+    });
+  })(req, res, next);
 });
 
 // ログアウト
