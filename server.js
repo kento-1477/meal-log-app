@@ -30,6 +30,19 @@ app.use('/uploads', express.static('uploads'));
 app.use(express.json()); // JSONボディをパースするために必要
 app.use(express.urlencoded({ extended: true })); // for form data
 
+// --- セッションとPassportの初期化 ---
+// 注意: secretは本番環境では.envファイルなどから読み込むべきです
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'a-secret-key-that-is-not-so-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false }, // HTTPSでない場合はfalse
+  }),
+);
+app.use(passport.initialize());
+app.use(passport.session());
+
 // --- Passport.js設定 ---
 passport.use(
   new LocalStrategy(
