@@ -12,7 +12,7 @@
     <div class="dashboard-header">
         <h1>ホーム</h1>
         <nav>
-            <a href="/" class="nav-button">食事記録</a>
+            <a href="/index.html" class="nav-button">食事記録</a>
             <a href="analytics.html" class="nav-button secondary">詳細分析へ</a>
         </nav>
     </div>
@@ -72,10 +72,19 @@
             <p class="notification">🔔 昼食の記録がまだです！</p>
         </div>
 
-        <!-- 6. 本日の食事記録 -->
+        <!-- 6. 食事記録 -->
         <div class="card large-card" id="meal-log-table">
-             <h3>本日の食事記録</h3>
-             <table>
+            <div class="card-header-container">
+                <h3>食事記録</h3>
+                <div class="date-filter-group">
+                    <label for="start-date">開始日:</label>
+                    <input type="date" id="start-date">
+                    <label for="end-date">終了日:</label>
+                    <input type="date" id="end-date">
+                    <button id="filter-button" class="button-primary">表示</button>
+                </div>
+            </div>
+            <table>
                 <thead>
                     <tr>
                         <th>時間</th>
@@ -111,30 +120,5 @@
     </div>
 
     <script src="dashboard.js"></script>
-    <script>
-        // PFC円グラフのダミー表示
-        const pfcCtx = document.getElementById('pfcPieChart').getContext('2d');
-        new Chart(pfcCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['タンパク質', '脂質', '炭水化物'],
-                datasets: [{
-                    data: [80, 60, 150],
-                    backgroundColor: ['#36A2EB', '#FF6384', '#FFCE56'],
-                    borderWidth: 2
-                }]
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false,
-                plugins: { 
-                    legend: { 
-                        display: false
-                    }
-                },
-                cutout: '60%'
-            }
-        });
-    </script>
 </body>
 </html>

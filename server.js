@@ -107,14 +107,25 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // --- PostgreSQLデータ操作関数 ---
-async function getMealLogs(userId) {
+async function getMealLogs(userId, startDate, endDate) {
   try {
-    const result = await pool.query(
-      'SELECT * FROM meal_logs WHERE user_id = $1 ORDER BY timestamp DESC',
-      [userId],
-    );
+    let query = 'SELECT * FROM meal_logs WHERE user_id = $1';
+    const values = [userId];
+
+    if (startDate && endDate) {
+      query += ' AND timestamp BETWEEN $2 AND $3';
+      // endDateの時刻を23:59:59に設定して、その日全体が含まれるようにする
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      values.push(startDate, endOfDay);
+    }
+
+    query += ' ORDER BY timestamp DESC';
+
+    const result = await pool.query(query, values);
+
     return result.rows.map((row) => ({
-      timestamp: new Date(row.timestamp).toLocaleString('ja-JP'),
+      timestamp: row.timestamp.toISOString(), // ISO形式で返す
       mealName: row.meal_name,
       protein: row.protein,
       fat: row.fat,
@@ -122,7 +133,7 @@ async function getMealLogs(userId) {
       calories: row.calories,
       imagePath: row.image_path,
       memo: row.memo,
-      id: row.id, // レコードを一意に識別するためのID
+      id: row.id,
     }));
   } catch (error) {
     console.error('Error fetching meal logs from PostgreSQL:', error);
@@ -627,7 +638,8 @@ app.get('/api/meal-data', async (req, res) => {
     return res.status(401).json({ error: '認証が必要です。' });
   }
   try {
-    const data = await getMealLogs(req.user.id);
+    const { start, end } = req.query;
+    const data = await getMealLogs(req.user.id, start, end);
     res.json(data);
   } catch (error) {
     console.error('Error retrieving meal data from PostgreSQL:', error);
@@ -690,14 +702,8 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-app.get('/', isAuthenticated, async (req, res) => {
-  const userId = req.user.id;
-  const goalsSet = await hasUserSetGoals(userId);
-  if (goalsSet) {
-    res.sendFile(path.join(__dirname, 'public', 'index.html')); // 目標設定済みならチャット画面へ
-  } else {
-    res.redirect('/goal-setting'); // 目標未設定なら目標設定画面へ
-  }
+app.get('/', isAuthenticated, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html')); // 常にチャット画面へ
 });
 
 app.get('/dashboard', isAuthenticated, (req, res) => {

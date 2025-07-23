@@ -5,11 +5,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     .getContext('2d');
   let pfcChartInstance = null; // Chart.jsインスタンスを保持する変数
 
+  const startDateInput = document.getElementById('start-date');
+  const endDateInput = document.getElementById('end-date');
+  const filterButton = document.getElementById('filter-button');
+
+  // 日付の初期値を設定（今日から7日前）
+  const today = new Date();
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(today.getDate() - 7);
+
+  // YYYY-MM-DD形式に変換
+  startDateInput.value = sevenDaysAgo.toISOString().split('T')[0];
+  endDateInput.value = today.toISOString().split('T')[0];
+
   // データをロードして表示する関数
-  async function loadAndDisplayData() {
-    mealDataBody.innerHTML = ''; // 既存のデータをクリア
+  async function loadAndDisplayData(startDate, endDate) {
+    mealDataBody.innerHTML = '<tr><td colspan="6">読み込み中...</td></tr>'; // 既存のデータをクリア
+
+    // 日付が未指定の場合は何もしない
+    if (!startDate || !endDate) {
+      mealDataBody.innerHTML =
+        '<tr><td colspan="6">開始日と終了日を指定してください。</td></tr>';
+      return;
+    }
+
     try {
-      const response = await fetch('/api/meal-data');
+      // APIリクエストに日付範囲を含める
+      const response = await fetch(
+        `/api/meal-data?start=${startDate}&end=${endDate}`,
+      );
       if (!response.ok) {
         if (response.status === 401) {
           window.location.href = '/login'; // 認証切れの場合はログインページへリダイレクト
@@ -17,22 +41,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const allMealData = await response.json();
+      const mealData = await response.json();
 
-      // 今日の日付を取得 (YYYY/MM/DD形式)
-      const today = new Date();
-      const todayString = `${today.getFullYear()}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getDate().toString().padStart(2, '0')}`;
-
-      // 今日の食事データのみをフィルタリング
-      const todayMealData = allMealData.filter((meal) => {
-        // meal.timestamp は "YYYY/MM/DD HH:MM:SS" 形式を想定
-        return meal.timestamp && meal.timestamp.startsWith(todayString);
-      });
-
-      if (todayMealData.length === 0) {
+      if (mealData.length === 0) {
         mealDataBody.innerHTML =
-          '<tr><td colspan="6">まだ今日の記録がありません。</td></tr>';
-        // 今日のデータがない場合、KPIも0にリセット
+          '<tr><td colspan="6">この期間の記録はありません。</td></tr>';
+        // データがない場合、KPIも0にリセット
         updateKPIs(0, 0, 0, 0, 0);
         updatePFCChart(0, 0, 0);
         return;
@@ -43,14 +57,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       let totalFat = 0;
       let totalCarbs = 0;
 
-      todayMealData.forEach((meal) => {
+      mealDataBody.innerHTML = ''; // データをクリア
+
+      mealData.forEach((meal) => {
         const row = document.createElement('tr');
-        // 時刻のみ表示
-        const time = meal.timestamp
-          ? meal.timestamp.split(' ')[1].substring(0, 5)
-          : '';
+        const mealDate = new Date(meal.timestamp);
+        // 日付と時刻を表示
+        const dateTimeString = `${mealDate.toLocaleDateString('ja-JP')} ${mealDate.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
+
         row.innerHTML = `
-                    <td>${time}</td>
+                    <td>${dateTimeString}</td>
                     <td>${meal.mealName || ''}</td>
                     <td>${meal.protein || ''}</td>
                     <td>${meal.fat || ''}</td>
@@ -71,29 +87,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
       console.error('Error fetching meal data:', error);
       mealDataBody.innerHTML =
-        '<tr><td colspan="6">データの読み込み中にエラーが発生しました。<br>開発者ツール（F12）のConsoleタブを確認してください。</td></tr>';
+        '<tr><td colspan="6">データの読み込み中にエラーが発生しました。</td></tr>';
     }
   }
 
   // KPIを更新する関数
   function updateKPIs(calories, protein, fat, carbs, targetCalories) {
     document.querySelector('#calories-tracker .kpi-value').textContent =
-      `${calories} / ${targetCalories} kcal`;
+      `${Math.round(calories)} / ${targetCalories} kcal`;
     const calorieProgressBar = document.querySelector(
       '#calories-tracker .progress-bar',
     );
-    const progressPercentage = (calories / targetCalories) * 100;
+    const progressPercentage =
+      targetCalories > 0 ? (calories / targetCalories) * 100 : 0;
     calorieProgressBar.style.width = `${Math.min(progressPercentage, 100)}%`; // 100%を超えないように
 
     document.querySelector(
       '#pfc-summary-card .pfc-details p:nth-child(1) strong',
-    ).textContent = `${protein} / 120g`; // 仮の目標値
+    ).textContent = `${Math.round(protein)} / 120g`; // 仮の目標値
     document.querySelector(
       '#pfc-summary-card .pfc-details p:nth-child(2) strong',
-    ).textContent = `${fat} / 70g`; // 仮の目標値
+    ).textContent = `${Math.round(fat)} / 70g`; // 仮の目標値
     document.querySelector(
       '#pfc-summary-card .pfc-details p:nth-child(3) strong',
-    ).textContent = `${carbs} / 250g`; // 仮の目標値
+    ).textContent = `${Math.round(carbs)} / 250g`; // 仮の目標値
   }
 
   // PFCチャートを更新する関数
@@ -131,6 +148,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // ページロード時にデータを表示
-  loadAndDisplayData();
+  // フィルターボタンのクリックイベント
+  filterButton.addEventListener('click', () => {
+    loadAndDisplayData(startDateInput.value, endDateInput.value);
+  });
+
+  // ページロード時に初期データを表示
+  loadAndDisplayData(startDateInput.value, endDateInput.value);
 });
