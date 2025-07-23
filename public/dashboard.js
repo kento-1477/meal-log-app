@@ -9,14 +9,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const endDateInput = document.getElementById('end-date');
   const filterButton = document.getElementById('filter-button');
 
-  // 日付の初期値を設定（今日から7日前）
+  // 日付の初期値を設定（今日1日分）
   const today = new Date();
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(today.getDate() - 7);
+  const todayString = today.toISOString().split('T')[0];
 
-  // YYYY-MM-DD形式に変換
-  startDateInput.value = sevenDaysAgo.toISOString().split('T')[0];
-  endDateInput.value = today.toISOString().split('T')[0];
+  startDateInput.value = todayString;
+  endDateInput.value = todayString;
 
   // データをロードして表示する関数
   async function loadAndDisplayData(startDate, endDate) {
