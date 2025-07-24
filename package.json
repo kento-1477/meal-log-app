@@ -7,8 +7,8 @@
     "start": "node server.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
     "prepare": "husky",
-    "test": "echo \"No test specified\"",
-    "lint": "echo \"No lint specified\""
+    "test": "echo \"No tests yet. Add a testing framework like Jest or Mocha.\"",
+    "lint": "prettier --check ."
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
