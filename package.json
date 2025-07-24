@@ -7,8 +7,8 @@
     "start": "node server.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
     "prepare": "husky",
-    "test": "echo \"No tests yet. Add a testing framework like Jest or Mocha.\"",
-    "lint": "prettier --check ."
+    "test": "jest --runInBand",
+    "lint": "eslint . --ext .js,.jsx"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
@@ -32,7 +32,11 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
     "husky": "^9.1.7",
+    "jest": "^30.0.5",
     "lint-staged": "^16.1.2",
     "prettier": "^3.6.2"
   }
