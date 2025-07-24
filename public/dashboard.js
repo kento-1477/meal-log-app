@@ -79,8 +79,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         totalCarbs += parseFloat(meal.carbs) || 0;
       });
 
+      // 目標値を取得
+      const goalsResponse = await fetch('/api/goals');
+      let userGoals = {
+        target_calories: 2500, // デフォルト値
+        target_protein: 120,
+        target_fat: 70,
+        target_carbs: 250,
+      };
+      if (goalsResponse.ok) {
+        const goalsData = await goalsResponse.json();
+        userGoals = {
+          target_calories:
+            goalsData.target_calories || userGoals.target_calories,
+          target_protein: goalsData.target_protein || userGoals.target_protein,
+          target_fat: goalsData.target_fat || userGoals.target_fat,
+          target_carbs: goalsData.target_carbs || userGoals.target_carbs,
+        };
+      } else {
+        console.warn(
+          '目標設定が見つからないか、取得に失敗しました。デフォルト値を使用します。',
+        );
+      }
+
       // KPIとPFCチャートを更新
-      updateKPIs(totalCalories, totalProtein, totalFat, totalCarbs, 2500); // 目標カロリーは仮で2500
+      updateKPIs(
+        totalCalories,
+        totalProtein,
+        totalFat,
+        totalCarbs,
+        userGoals.target_calories,
+        userGoals.target_protein,
+        userGoals.target_fat,
+        userGoals.target_carbs,
+      );
       updatePFCChart(totalProtein, totalFat, totalCarbs);
     } catch (error) {
       console.error('Error fetching meal data:', error);
@@ -90,7 +122,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // KPIを更新する関数
-  function updateKPIs(calories, protein, fat, carbs, targetCalories) {
+  function updateKPIs(
+    calories,
+    protein,
+    fat,
+    carbs,
+    targetCalories,
+    targetProtein,
+    targetFat,
+    targetCarbs,
+  ) {
     document.querySelector('#calories-tracker .kpi-value').textContent =
       `${Math.round(calories)} / ${targetCalories} kcal`;
     const calorieProgressBar = document.querySelector(
@@ -102,13 +143,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.querySelector(
       '#pfc-summary-card .pfc-details p:nth-child(1) strong',
-    ).textContent = `${Math.round(protein)} / 120g`; // 仮の目標値
+    ).textContent = `${Math.round(protein)} / ${targetProtein}g`;
     document.querySelector(
       '#pfc-summary-card .pfc-details p:nth-child(2) strong',
-    ).textContent = `${Math.round(fat)} / 70g`; // 仮の目標値
+    ).textContent = `${Math.round(fat)} / ${targetFat}g`;
     document.querySelector(
       '#pfc-summary-card .pfc-details p:nth-child(3) strong',
-    ).textContent = `${Math.round(carbs)} / 250g`; // 仮の目標値
+    ).textContent = `${Math.round(carbs)} / ${targetCarbs}g`;
   }
 
   // PFCチャートを更新する関数
