@@ -2,7 +2,9 @@ const { Pool } = require('pg');
 
 // --- PostgreSQL接続設定 ---
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString:
+    process.env.DATABASE_URL ||
+    'postgresql://test_user:test_password@localhost:5433/test_meal_log_db',
   ...(process.env.NODE_ENV === 'production' && {
     ssl: {
       rejectUnauthorized: false, // Renderなどのホスティングサービスでは必要になることが多い

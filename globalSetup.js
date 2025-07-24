@@ -26,6 +26,15 @@ module.exports = async () => {
   }
 
   // ── スキーマ & シード投入 ────────────────────────────────
+  // test_user ロールが存在しないエラーを回避するため、postgres ユーザーで接続し、ロールを作成
+  execSync(
+    `psql -h localhost -p ${PORT} -U postgres -d test_meal_log_db -c "CREATE USER test_user WITH PASSWORD 'test_password';"`,
+    { stdio: 'inherit' },
+  );
+  execSync(
+    `psql -h localhost -p ${PORT} -U postgres -d test_meal_log_db -c "GRANT ALL PRIVILEGES ON DATABASE test_meal_log_db TO test_user;"`,
+    { stdio: 'inherit' },
+  );
   execSync(`psql ${CONN} -f ./schema.sql`, { stdio: 'inherit' });
   execSync(
     `psql ${CONN} -c "INSERT INTO users (id,email,password_hash)
