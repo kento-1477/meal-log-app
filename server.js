@@ -952,7 +952,148 @@ app.get('/api/ai-advice', isAuthenticated, async (req, res) => {
   }
 });
 
-// --- サーバー起動 ---
-app.listen(PORT, () => {
-  console.log(`食事記録アプリが http://localhost:${PORT} で起動しました`);
+// --- 食事スコアAPIエンドポイント ---
+app.get('/api/meal-score', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const mealLogs = await getMealLogs(
+      userId,
+      today.toISOString(),
+      tomorrow.toISOString(),
+    );
+
+    // ユーザーの目標値を取得
+    const goalsResult = await pool.query(
+      'SELECT target_calories, target_protein, target_fat, target_carbs FROM user_goals WHERE user_id = $1',
+      [userId],
+    );
+    const userGoals = goalsResult.rows[0] || {
+      target_calories: 2000, // デフォルト値
+      target_protein: 100,
+      target_fat: 60,
+      target_carbs: 200,
+    };
+
+    let totalCalories = 0;
+    let totalProtein = 0;
+    let totalFat = 0;
+    let totalCarbs = 0;
+
+    mealLogs.forEach((meal) => {
+      totalCalories += parseFloat(meal.calories) || 0;
+      totalProtein += parseFloat(meal.protein) || 0;
+      totalFat += parseFloat(meal.fat) || 0;
+      totalCarbs += parseFloat(meal.carbs) || 0;
+    });
+
+    // スコア計算ロジック（簡易版）
+    let score = 100;
+    let comment = '素晴らしいバランスです！';
+
+    // カロリーの評価
+    const calorieDiff = Math.abs(totalCalories - userGoals.target_calories);
+    const caloriePercentageDiff =
+      (calorieDiff / userGoals.target_calories) * 100;
+    if (caloriePercentageDiff > 30) {
+      score -= 30;
+      comment = 'カロリー摂取量が目標から大きく外れています。';
+    } else if (caloriePercentageDiff > 15) {
+      score -= 15;
+      comment = 'カロリー摂取量が目標から少し外れています。';
+    }
+
+    // PFCバランスの評価（簡易版）
+    // 目標値に対する達成度を評価
+    const proteinRatio =
+      userGoals.target_protein > 0
+        ? totalProtein / userGoals.target_protein
+        : 0;
+    const fatRatio =
+      userGoals.target_fat > 0 ? totalFat / userGoals.target_fat : 0;
+    const carbsRatio =
+      userGoals.target_carbs > 0 ? totalCarbs / userGoals.target_carbs : 0;
+
+    // 各栄養素が目標値の80%から120%の範囲内であれば高評価
+    if (proteinRatio < 0.8 || proteinRatio > 1.2) {
+      score -= 10;
+      comment = 'タンパク質の摂取量が目標から外れています。';
+    }
+    if (fatRatio < 0.8 || fatRatio > 1.2) {
+      score -= 10;
+      comment = '脂質の摂取量が目標から外れています。';
+    }
+    if (carbsRatio < 0.8 || carbsRatio > 1.2) {
+      score -= 10;
+      comment = '炭水化物の摂取量が目標から外れています。';
+    }
+
+    score = Math.max(0, Math.round(score)); // スコアが0未満にならないように
+
+    // スコアに応じたコメントの調整
+    if (score < 50) {
+      comment = '食事のバランスを見直しましょう。';
+    } else if (score < 70) {
+      comment = 'もう少しバランスを意識すると良いでしょう。';
+    } else if (score < 90) {
+      comment = '良いバランスです！';
+    } else {
+      comment = '素晴らしいバランスです！';
+    }
+
+    res.json({ score, comment });
+  } catch (error) {
+    console.error('Error calculating meal score:', error);
+    res.status(500).json({ error: '食事スコアの計算に失敗しました。' });
+  }
 });
+
+// --- リマインダーAPIエンドポイント ---
+app.get('/api/reminders', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const mealLogs = await getMealLogs(
+      userId,
+      today.toISOString(),
+      tomorrow.toISOString(),
+    );
+
+    const reminders = [];
+    const mealTimes = {
+      breakfast: { start: 5, end: 10, message: '朝食の記録がまだです！' },
+      lunch: { start: 11, end: 14, message: '昼食の記録がまだです！' },
+      dinner: { start: 17, end: 21, message: '夕食の記録がまだです！' },
+    };
+
+    const currentHour = new Date().getHours();
+
+    for (const key in mealTimes) {
+      const mealTime = mealTimes[key];
+      const hasLogged = mealLogs.some((log) => {
+        const logHour = new Date(log.timestamp).getHours();
+        return logHour >= mealTime.start && logHour < mealTime.end;
+      });
+
+      if (!hasLogged && currentHour >= mealTime.end) {
+        reminders.push(mealTime.message);
+      }
+    }
+
+    res.json({ reminders });
+  } catch (error) {
+    console.error('Error generating reminders:', error);
+    res.status(500).json({ error: 'リマインダーの生成に失敗しました。' });
+  }
+});
+
+// --- サーバー起動 ---
+module.exports = app;
