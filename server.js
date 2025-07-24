@@ -913,6 +913,45 @@ app.get('/api/user', isAuthenticated, (req, res) => {
   res.json({ user: { id: req.user.id, email: req.user.email } });
 });
 
+// --- AIアドバイスAPIエンドポイント ---
+app.get('/api/ai-advice', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const mealLogs = await getMealLogs(
+      userId,
+      today.toISOString(),
+      tomorrow.toISOString(),
+    );
+
+    let csvString = 'データがありません。';
+    if (mealLogs.length > 0) {
+      // ヘッダー行を生成
+      const headers = Object.keys(mealLogs[0]).join(',');
+      // データ行を生成
+      const dataRows = mealLogs
+        .map((row) => Object.values(row).join(','))
+        .join('\n');
+      csvString = `${headers}\n${dataRows}`;
+    }
+
+    const analysisPrompt = PROMPTS.analysis_summary
+      .replace('{USER_REQUEST}', '今日の食事記録についてアドバイスをください。')
+      .replace('{CSV_DATA}', csvString);
+
+    const aiAdvice = await callGemini(analysisPrompt);
+
+    res.json({ advice: aiAdvice || '現在、アドバイスを生成できません。' });
+  } catch (error) {
+    console.error('Error generating AI advice:', error);
+    res.status(500).json({ error: 'AIアドバイスの生成に失敗しました。' });
+  }
+});
+
 // --- サーバー起動 ---
 app.listen(PORT, () => {
   console.log(`食事記録アプリが http://localhost:${PORT} で起動しました`);

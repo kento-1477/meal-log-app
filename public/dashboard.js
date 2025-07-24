@@ -194,4 +194,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ページロード時に初期データを表示
   loadAndDisplayData(startDateInput.value, endDateInput.value);
+  loadAIAdivce();
 });
+
+async function loadAIAdivce() {
+  const aiAdviceCard = document.getElementById('ai-advice-card');
+  const aiCommentElement = aiAdviceCard.querySelector('.ai-comment p');
+  aiCommentElement.textContent = 'AIアドバイスを生成中...';
+
+  try {
+    const response = await fetch('/api/ai-advice');
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    aiCommentElement.textContent = data.advice;
+  } catch (error) {
+    console.error('Error fetching AI advice:', error);
+    aiCommentElement.textContent = 'AIアドバイスの取得に失敗しました。';
+  }
+}
