@@ -1,59 +1,57 @@
-process.env.NODE_ENV = 'test';
-
 const request = require('supertest');
-const { app, isAuthenticated } = require('../server');
+const app = require('../server');
+const { pool } = require('../services/db');
 
-// req.isAuthenticated() をモック化
-app.use((req, res, next) => {
-  req.isAuthenticated = () => true;
-  next();
+afterAll(async () => {
+  await pool.end();
 });
 
-describe('GET /api/meal-data', () => {
-  it('returns 200 and array', async () => {
-    const res = await request(app).get('/api/meal-data').query({
-      start: '2024-01-01T00:00:00.000Z',
-      end: '2024-01-01T23:59:59.999Z',
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          userId: 1,
-          mealName: 'Test Meal',
-          protein: 10,
-          fat: 5,
-          carbs: 20,
-          calories: 200,
-        }),
-      ]),
+describe('Meal Log API Integration Tests', () => {
+  test('GET /api/meals should fail with 401 without authentication', async () => {
+    const response = await request(app).get('/api/meals');
+    expect(response.statusCode).toBe(401);
+    expect(response.body.message).toBe('Authentication required.');
+  });
+
+  test('GET /api/meals should return meal logs for authenticated user', async () => {
+    const response = await request(app)
+      .get('/api/meals')
+      .set('Authorization', 'Bearer test-token'); // Send auth header
+
+    expect(response.statusCode).toBe(200);
+    expect(Array.isArray(response.body)).toBe(true);
+
+    const testMeal = response.body.find(
+      (meal) => meal.food_item === 'Test Toast',
     );
+    expect(testMeal).toBeDefined();
+    expect(testMeal.calories).toBe(200);
+    expect(testMeal.meal_type).toBe('Breakfast');
   });
 
-  // 認証なしの場合 (401 Unauthorized) テスト
-  it('should return 401 if not authenticated', async () => {
-    // テスト環境での認証スキップを一時的に無効化
-    process.env.NODE_ENV = 'development'; // または 'production'
-    const res = await request(app).get('/api/meal-data');
-    expect(res.statusCode).toBe(401);
-    process.env.NODE_ENV = 'test'; // テスト環境に戻す
-  });
+  test('POST /api/meals should create a new meal log for authenticated user', async () => {
+    const newMeal = {
+      meal_type: 'Lunch',
+      food_item: 'Test Salad',
+      calories: 350,
+      consumed_at: new Date().toISOString(),
+    };
 
-  // データベースエラーの場合 (500 Internal Server Error) テスト
-  // このテストは、実際のDBエラーをシミュレートするために、
-  // services/meals.js の pool をモック化する必要があります。
-  // 現状では、結合テストの目的から外れるため、コメントアウトします。
-  /*
-  it('should return 500 if getMealLogs throws an error', async () => {
-    // getMealLogs.mockImplementationOnce(() => {
-    //   throw new Error('Database error');
-    // });
-    const res = await request(app).get('/api/meal-data').query({
-      start: '2024-01-01T00:00:00.000Z',
-      end: '2024-01-01T23:59:59.999Z',
-    });
-    expect(res.statusCode).toBe(500);
-    expect(res.body).toEqual({ error: '食事データの取得に失敗しました。' });
+    const response = await request(app)
+      .post('/api/meals')
+      .set('Authorization', 'Bearer test-token') // Send auth header
+      .send(newMeal);
+
+    expect(response.statusCode).toBe(201);
+    expect(response.body.message).toBe('Meal log created successfully');
+    expect(response.body.meal).toBeDefined();
+    expect(response.body.meal.food_item).toBe('Test Salad');
+
+    const dbResult = await pool.query(
+      'SELECT * FROM meal_logs WHERE food_item = $1',
+      ['Test Salad'],
+    );
+    expect(dbResult.rows.length).toBe(1);
+    expect(dbResult.rows[0].calories).toBe(350);
   });
-  */
 });

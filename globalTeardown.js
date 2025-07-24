@@ -1,7 +1,11 @@
 const { execSync } = require('child_process');
 
 module.exports = async () => {
-  console.log('\nTeardown test environment...');
-  // Docker Composeでテスト用DBを停止
-  execSync('docker-compose down -v');
+  if (process.env.CI) {
+    console.log('CI environment detected, skipping local Docker teardown.');
+    return;
+  }
+
+  console.log('Stopping local test database...');
+  execSync('docker-compose down -v', { stdio: 'inherit' });
 };

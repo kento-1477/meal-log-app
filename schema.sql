@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -29,12 +30,13 @@ CREATE TABLE IF NOT EXISTS user_goals (
 CREATE TABLE IF NOT EXISTS meal_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    meal_name VARCHAR(255) NOT NULL,
+    meal_type VARCHAR(50) NOT NULL, -- meal_nameから変更
+    food_item VARCHAR(255) NOT NULL, -- 新しく追加
+    calories NUMERIC NOT NULL,
+    consumed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- timestampから変更
     protein NUMERIC,
     fat NUMERIC,
     carbs NUMERIC,
-    calories NUMERIC,
     image_path VARCHAR(255),
     memo TEXT
 );
