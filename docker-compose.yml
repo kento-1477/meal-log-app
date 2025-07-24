@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  test_db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: test_meal_log_db
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432" # ホストの5433ポートをコンテナの5432ポートにマッピング
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_meal_log_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
