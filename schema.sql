@@ -30,13 +30,40 @@ CREATE TABLE IF NOT EXISTS user_goals (
 CREATE TABLE IF NOT EXISTS meal_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    meal_type VARCHAR(50) NOT NULL, -- meal_nameから変更
-    food_item VARCHAR(255) NOT NULL, -- 新しく追加
+    meal_type VARCHAR(50) NOT NULL,
+    food_item VARCHAR(255) NOT NULL,
     calories NUMERIC NOT NULL,
-    consumed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- timestampから変更
+    consumed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     protein NUMERIC,
     fat NUMERIC,
     carbs NUMERIC,
     image_path VARCHAR(255),
     memo TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reminder_settings (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reminder_name VARCHAR(255) NOT NULL,
+    notification_time TIME NOT NULL,
+    days_of_week JSONB NOT NULL,
+    is_enabled BOOLEAN DEFAULT true,
+    message TEXT,
+    coaching_level VARCHAR(50) DEFAULT 'gentle', -- 追加
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id        INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  coaching_level TEXT NOT NULL DEFAULT 'gentle',
+  updated_at     TIMESTAMP NOT NULL DEFAULT NOW()
 );

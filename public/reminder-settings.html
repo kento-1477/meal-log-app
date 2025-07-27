@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リマインダー設定 - 食事記録アプリ</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <a href="/dashboard" class="back-link">&larr; ダッシュボードへ</a>
+            <h1>リマインダー設定</h1>
+        </header>
+
+        <main>
+            <section id="reminder-list-section">
+                <h2>通知リスト</h2>
+                <div id="reminder-list">
+                    <!-- JSによってリマインダーカードがここに挿入されます -->
+                </div>
+                <button id="add-reminder-btn" class="btn btn-secondary">+ 新しいリマインダーを追加</button>
+            </section>
+
+            <section id="coaching-level-section">
+                <h2>コーチングレベル</h2>
+                <p class="description">通知メッセージの熱心さを選択できます。</p>
+                <div class="radio-group">
+                    <label>
+                        <input type="radio" name="coaching-level" value="gentle" checked>
+                        <span>優しいヒントのみ</span>
+                    </label>
+                    <label>
+                        <input type="radio" name="coaching-level" value="intense">
+                        <span>具体的なコーチング</span>
+                    </label>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <button id="save-settings-btn" class="btn btn-primary">変更を保存</button>
+        </footer>
+    </div>
+
+    <!-- リマインダーカードのテンプレート -->
+    <template id="reminder-card-template">
+        <div class="reminder-card">
+            <div class="card-header">
+                <input type="text" class="reminder-name" placeholder="リマインダー名 (例: 朝食)">
+                <label class="toggle-switch">
+                    <input type="checkbox" class="reminder-enabled">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="card-body">
+                <input type="time" class="reminder-time">
+                <div class="reminder-days">
+                    <!-- 曜日のチェックボックスがJSによってここに挿入されます -->
+                </div>
+                <textarea class="reminder-message" placeholder="通知メッセージ (例: 朝食の時間です！)"></textarea>
+            </div>
+            <div class="card-footer">
+                <button class="delete-reminder-btn">削除</button>
+            </div>
+        </div>
+    </template>
+
+    <script src="reminder-settings.js"></script>
+</body>
+</html>

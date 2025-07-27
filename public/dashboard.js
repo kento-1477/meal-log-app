@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // APIリクエストに日付範囲を含める
       const response = await fetch(
         `/api/meal-data?start=${startDate}&end=${endDate}`,
+        { credentials: 'include' },
       );
       if (!response.ok) {
         if (response.status === 401) {
@@ -80,7 +81,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       // 目標値を取得
-      const goalsResponse = await fetch('/api/goals');
+      const goalsResponse = await fetch('/api/goals', {
+        credentials: 'include',
+      });
       let userGoals = {
         target_calories: 2500, // デフォルト値
         target_protein: 120,
@@ -195,7 +198,44 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ページロード時に初期データを表示
   loadAndDisplayData(startDateInput.value, endDateInput.value);
   loadAIAdivce();
+  loadMealScore();
+  loadNotifications(); // 変更
 });
+
+async function loadNotifications() {
+  const notificationList = document.getElementById('notification-list');
+  notificationList.innerHTML = '<p>通知を確認中...</p>';
+
+  try {
+    const response = await fetch('/api/notifications');
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const notifications = await response.json();
+    if (notifications && notifications.length > 0) {
+      notificationList.innerHTML = notifications
+        .map((n) => `<div class="notification-item">🔔 ${n.message}</div>`)
+        .join('');
+      // 通知を既読にする
+      const notificationIds = notifications.map((n) => n.id);
+      await fetch('/api/reminders/notifications/mark-as-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationIds }),
+        credentials: 'include',
+      });
+    } else {
+      notificationList.innerHTML = '<p>新しい通知はありません。</p>';
+    }
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    notificationList.innerHTML = '<p>通知の取得に失敗しました。</p>';
+  }
+}
 
 async function loadAIAdivce() {
   const aiAdviceCard = document.getElementById('ai-advice-card');
@@ -203,7 +243,7 @@ async function loadAIAdivce() {
   aiCommentElement.textContent = 'AIアドバイスを生成中...';
 
   try {
-    const response = await fetch('/api/ai-advice');
+    const response = await fetch('/api/ai-advice', { credentials: 'include' });
     if (!response.ok) {
       if (response.status === 401) {
         window.location.href = '/login';
