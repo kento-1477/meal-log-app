@@ -9,20 +9,28 @@ types.setTypeParser(NUMERIC_OID, (val) => {
   return parseFloat(val);
 });
 
+const isProduction = process.env.NODE_ENV === 'production';
 const isTest = process.env.NODE_ENV === 'test';
 
-const connectionConfig = {
-  user: process.env.DB_USER || 'test_user',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_DATABASE || 'test_db',
-  password: process.env.DB_PASSWORD || 'test_password',
-  port: process.env.DB_PORT || 5433,
-};
+const connectionConfig = isProduction
+  ? {
+      // Production (Render)
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    }
+  : {
+      // Development/Test
+      user: process.env.DB_USER || 'test_user',
+      host: process.env.DB_HOST || 'localhost',
+      database: process.env.DB_DATABASE || 'test_db',
+      password: process.env.DB_PASSWORD || 'test_password',
+      port: parseInt(process.env.DB_PORT || '5433', 10),
+    };
 
 const pool = new Pool(connectionConfig);
 
 pool.on('connect', () => {
-  if (!isTest) {
+  if (!isTest && !isProduction) {
     console.log('Connected to the DB');
   }
 });
