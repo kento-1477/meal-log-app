@@ -49,6 +49,11 @@ const waitForDb = (retries = 25, delay = 4000) => {
         } else {
           console.log('Successfully connected to the database.');
           try {
+            console.log('Applying database migrations...');
+            execSync(
+              `psql "postgresql://${user}:${password}@${host}:${port}/${dbName}" -f sql/20250729_add_notifications_created_at.sql`,
+              { stdio: 'inherit' },
+            );
             await seedData(client);
             await client.end();
             resolve();

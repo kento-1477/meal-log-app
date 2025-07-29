@@ -195,49 +195,15 @@ if (process.env.NODE_ENV !== 'test') {
   });
 }
 
-const cron = require('node-cron');
+const { runReminderCheck } = require('./services/reminders-check');
 
 // --- スケジューラーのセットアップ ---
-// 毎分実行
-cron.schedule('* * * * *', async () => {
-  console.log('Running a job every minute to check for reminders');
-  try {
-    const now = new Date();
-    const current_time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
-    const day_of_week = now
-      .toLocaleString('en-US', { weekday: 'long' })
-      .toLowerCase();
-
-    // 有効なリマインダー設定を取得
-    const { rows: settings } = await pool.query(
-      `SELECT * FROM reminder_settings 
-       WHERE is_enabled = true AND notification_time = $1 AND days_of_week::jsonb ? $2`,
-      [current_time, day_of_week],
-    );
-
-    for (const setting of settings) {
-      // 2分以内に同じリマインダーの通知が作られていないか確認
-      const two_minutes_ago = new Date(now.getTime() - 2 * 60 * 1000);
-      const { rows: recent_notifications } = await pool.query(
-        'SELECT 1 FROM notifications WHERE user_id = $1 AND message = $2 AND created_at > $3',
-        [setting.user_id, setting.message, two_minutes_ago],
-      );
-
-      if (recent_notifications.length === 0) {
-        // 通知を作成
-        await pool.query(
-          'INSERT INTO notifications (user_id, message) VALUES ($1, $2)',
-          [setting.user_id, setting.message],
-        );
-        console.log(
-          `Notification created for user ${setting.user_id}: ${setting.message}`,
-        );
-      }
-    }
-  } catch (error) {
-    console.error('Error in cron job:', error);
-  }
-});
+if (process.env.NODE_ENV !== 'test' && process.env.ENABLE_CRON !== 'false') {
+  const cron = require('node-cron');
+  cron.schedule('* * * * *', () => runReminderCheck(pool));
+}
 
 // For testing, we export the app and a function to close the server
 module.exports = app;
+
+module.exports.runReminderCheck = runReminderCheck; // Export for testing
