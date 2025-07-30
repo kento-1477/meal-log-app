@@ -2,9 +2,12 @@
   "name": "meal-log-app",
   "version": "1.0.0",
   "description": "A simple chat-based meal logging web app.",
+  "engines": {
+    "node": "22.x"
+  },
   "main": "server.js",
   "scripts": {
-    "start": "node start.js",
+    "start": "node server.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
     "prepare": "husky",
     "test": "NODE_ENV=test ENABLE_CRON=false jest --runInBand",
@@ -21,6 +24,7 @@
   "dependencies": {
     "axios": "^1.6.8",
     "bcrypt": "^6.0.0",
+    "connect-pg-simple": "^10.0.0",
     "csv-parser": "^3.2.0",
     "csv-stringify": "^6.6.0",
     "csv-writer": "^1.6.0",

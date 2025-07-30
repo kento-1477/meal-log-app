@@ -1,45 +1,38 @@
+// services/db.js
 const { Pool, types } = require('pg');
-require('dotenv').config();
 
-// OID for NUMERIC data type in PostgreSQL
-const NUMERIC_OID = 1700;
+// numericをfloatに
+types.setTypeParser(1700, (v) => (v == null ? null : parseFloat(v)));
 
-// Convert NUMERIC type to float
-types.setTypeParser(NUMERIC_OID, (val) => {
-  return parseFloat(val);
-});
+const url = process.env.DATABASE_URL;
+let config;
 
-const isProduction = process.env.NODE_ENV === 'production';
-const isTest = process.env.NODE_ENV === 'test';
-
-const connectionConfig = isProduction
-  ? {
-      // Production (Render)
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-    }
-  : {
-      // Development/Test
-      user: process.env.DB_USER || 'test_user',
-      host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_DATABASE || 'test_db',
-      password: process.env.DB_PASSWORD || 'test_password',
-      port: parseInt(process.env.DB_PORT || '5433', 10),
-    };
-
-const pool = new Pool(connectionConfig);
-
-pool.on('connect', () => {
-  if (!isTest && !isProduction) {
-    console.log('Connected to the DB');
-  }
-});
-
-if (!isTest) {
-  pool.on('error', (err) => {
-    console.error('Unexpected error on idle client', err);
-    process.exit(-1);
-  });
+if (url) {
+  // URLが localhost/127.0.0.1 なら SSL 無効、それ以外は Render 想定で SSL 有効
+  const u = new URL(url);
+  const isLocalHost = ['localhost', '127.0.0.1'].includes(u.hostname);
+  config = {
+    connectionString: url,
+    ssl: isLocalHost ? false : { rejectUnauthorized: false },
+  };
+} else {
+  config = {
+    user: process.env.DB_USER || 'test_user',
+    host: process.env.DB_HOST || 'localhost',
+    database: process.env.DB_DATABASE || 'test_db',
+    password: process.env.DB_PASSWORD || 'test_password',
+    port: Number(process.env.DB_PORT) || 5432,
+    ssl: false, // 明示
+  };
 }
 
+if (process.env.NODE_ENV !== 'production') {
+  console.log(
+    '[db] host/url=%s ssl=%o',
+    process.env.DATABASE_URL || process.env.DB_HOST,
+    config.ssl,
+  );
+}
+
+const pool = new Pool(config);
 module.exports = { pool };
