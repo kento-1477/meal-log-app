@@ -105,36 +105,45 @@ app.post('/api/logout', (req, res) => {
   });
 });
 
-// --- API Routes ---
-const reminderRoutes = require('./services/reminders');
-
-app.use('/api/meals', mealRoutes);
-app.use('/api/reminders', reminderRoutes); // ★ ここを限定
-
 // --- Authentication Middleware ---
-function isAuthenticated(req, res, next) {
-  // テスト環境では認証をスキップし、ダミーユーザーを設定
+// For API endpoints
+function requireApiAuth(req, res, next) {
   if (process.env.NODE_ENV === 'test') {
     req.user = { id: 1, email: 'test@example.com' };
     return next();
   }
-  // 実際の認証チェック
   if (req.isAuthenticated()) {
     return next();
   }
   res.status(401).json({ message: 'Authentication required.' });
 }
 
+// For user-facing pages
+function requirePageAuth(req, res, next) {
+  if (process.env.NODE_ENV === 'test') {
+    req.user = { id: 1, email: 'test@example.com' };
+    return next();
+  }
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.redirect('/login.html');
+}
+
+// Apply the correct middleware to routes
+app.use('/api/meals', requireApiAuth, mealRoutes);
+app.use('/api/reminders', requireApiAuth, reminderRoutes);
+
 // --- Protected HTML Routes ---
-app.get('/', isAuthenticated, (req, res) => {
+app.get('/', requirePageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/reminder-settings', isAuthenticated, (req, res) => {
+app.get('/reminder-settings', requirePageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'reminder-settings.html'));
 });
 
-app.get('/dashboard', isAuthenticated, (req, res) => {
+app.get('/dashboard', requirePageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
@@ -142,6 +151,27 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
 app.use('/api/*', (_req, res) =>
   res.status(404).json({ message: 'Not Found' }),
 );
+
+// --- Health Check Endpoint (for development/debugging) ---
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/_health/db', async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          to_regclass('public.users') as users,
+          to_regclass('public.reminder_settings') as reminder_settings
+      `);
+      res.status(200).json(result.rows[0]);
+    } catch (error) {
+      res
+        .status(500)
+        .json({
+          message: 'Database health check failed',
+          error: error.message,
+        });
+    }
+  });
+}
 
 // [ROUTES-LISTING V2]
 if (process.env.NODE_ENV !== 'production') {

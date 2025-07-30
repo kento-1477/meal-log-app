@@ -3,7 +3,10 @@ const app = require('../server');
 const { pool } = require('../services/db');
 
 afterAll(async () => {
-  await pool.end();
+  // cronジョブを停止
+  if (app.stopCron) {
+    app.stopCron();
+  }
 });
 
 describe('Meal Log API Integration Tests', () => {

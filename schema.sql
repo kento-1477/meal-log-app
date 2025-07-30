@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS reminder_settings (
 CREATE TABLE IF NOT EXISTS notifications (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reminder_id INTEGER REFERENCES reminder_settings(id) ON DELETE SET NULL, -- 追加
     message TEXT NOT NULL,
     is_read BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

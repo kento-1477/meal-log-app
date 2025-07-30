@@ -4,10 +4,10 @@
   "description": "A simple chat-based meal logging web app.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node start.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
     "prepare": "husky",
-    "test": "NODE_ENV=test jest --runInBand",
+    "test": "NODE_ENV=test ENABLE_CRON=false jest --runInBand",
     "lint": "eslint . --ext .js,.jsx",
     "dev": "nodemon start.js"
   },

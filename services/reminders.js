@@ -16,6 +16,36 @@ const isAuthenticated = (req, res, next) => {
   res.status(401).json({ message: 'Authentication required.' });
 };
 
+// Helper function to get coaching level
+async function getCoachingLevel(userId, reminderId = null) {
+  let coachingLevel = 'gentle'; // Default
+
+  if (process.env.FEATURE_REMINDER_LEVEL_OVERRIDE === 'true' && reminderId) {
+    const { rows } = await pool.query(
+      'SELECT coaching_level FROM reminder_settings WHERE id = $1 AND user_id = $2',
+      [reminderId, userId],
+    );
+    if (rows.length > 0 && rows[0].coaching_level !== null) {
+      coachingLevel = rows[0].coaching_level;
+    } else {
+      // Fallback to user preferences if reminder_settings.coaching_level is NULL
+      const { rows: userPrefs } = await pool.query(
+        'SELECT coaching_level FROM user_preferences WHERE user_id = $1',
+        [userId],
+      );
+      coachingLevel = userPrefs[0]?.coaching_level || 'gentle';
+    }
+  } else {
+    // Use user preferences
+    const { rows } = await pool.query(
+      'SELECT coaching_level FROM user_preferences WHERE user_id = $1',
+      [userId],
+    );
+    coachingLevel = rows[0]?.coaching_level || 'gentle';
+  }
+  return coachingLevel;
+}
+
 // --- Reminder Settings API ---
 
 // GET /api/reminder-settings - ユーザーのリマインダー設定を取得
@@ -41,11 +71,17 @@ router.post('/reminder-settings', isAuthenticated, async (req, res) => {
     days_of_week,
     is_enabled,
     message,
+    coaching_level: incoming_coaching_level, // Rename to avoid conflict
   } = req.body;
 
   // バリデーション
   if (!reminder_name || !notification_time || !days_of_week) {
     return res.status(400).json({ message: 'Missing required fields.' });
+  }
+
+  let coaching_level_to_save = null; // Default to NULL
+  if (process.env.FEATURE_REMINDER_LEVEL_OVERRIDE === 'true') {
+    coaching_level_to_save = incoming_coaching_level; // Use incoming if feature flag is true
   }
 
   try {
@@ -54,7 +90,7 @@ router.post('/reminder-settings', isAuthenticated, async (req, res) => {
       // 更新 (UPSERT)
       result = await pool.query(
         `UPDATE reminder_settings 
-         SET reminder_name = $1, notification_time = $2, days_of_week = $3, is_enabled = $4, message = $5, updated_at = CURRENT_TIMESTAMP
+         SET reminder_name = $1, notification_time = $2, days_of_week = $3, is_enabled = $4, message = $5, coaching_level = $8, updated_at = CURRENT_TIMESTAMP
          WHERE id = $6 AND user_id = $7 RETURNING *`,
         [
           reminder_name,
@@ -64,13 +100,14 @@ router.post('/reminder-settings', isAuthenticated, async (req, res) => {
           message,
           id,
           req.user.id,
+          coaching_level_to_save,
         ],
       );
     } else {
       // 作成
       result = await pool.query(
-        `INSERT INTO reminder_settings (user_id, reminder_name, notification_time, days_of_week, is_enabled, message)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        `INSERT INTO reminder_settings (user_id, reminder_name, notification_time, days_of_week, is_enabled, message, coaching_level)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [
           req.user.id,
           reminder_name,
@@ -78,6 +115,7 @@ router.post('/reminder-settings', isAuthenticated, async (req, res) => {
           days_of_week,
           is_enabled,
           message,
+          coaching_level_to_save,
         ],
       );
     }
@@ -190,12 +228,9 @@ router.post(
       !Array.isArray(notificationIds) ||
       notificationIds.length === 0
     ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            'Invalid request body. Expected an array of notification IDs.',
-        });
+      return res.status(400).json({
+        message: 'Invalid request body. Expected an array of notification IDs.',
+      });
     }
     try {
       const result = await pool.query(

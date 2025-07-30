@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["message", "tone", "dedupe_key"],
+  "properties": {
+    "message": { "type": "string", "maxLength": 200 },
+    "tone": { "type": "string", "enum": ["gentle", "intense"] },
+    "dedupe_key": { "type": "string" }
+  }
+}
