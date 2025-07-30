@@ -6,6 +6,7 @@ const passport = require('passport');
 const session = require('express-session');
 const { pool } = require('./services/db'); // 修正: db.jsからpoolをインポート
 const mealRoutes = require('./services/meals'); // 修正: meals.jsからルートをインポート
+const reminderRoutes = require('./services/reminders');
 
 const app = express();
 
@@ -163,12 +164,10 @@ if (process.env.NODE_ENV !== 'production') {
       `);
       res.status(200).json(result.rows[0]);
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          message: 'Database health check failed',
-          error: error.message,
-        });
+      res.status(500).json({
+        message: 'Database health check failed',
+        error: error.message,
+      });
     }
   });
 }
