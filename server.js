@@ -40,6 +40,90 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+// --- User Registration API ---
+app.post('/api/register', async (req, res) => {
+  try {
+    let { username, email, password } = req.body || {};
+    if (!email || !password)
+      return res
+        .status(400)
+        .json({ message: 'Email and password are required.' });
+
+    // username 未指定なら email から生成（ユニーク化）
+    if (!username || !username.trim()) {
+      const base = (email.split('@')[0] || 'user').toLowerCase();
+      let candidate = base,
+        i = 1;
+      while (true) {
+        const { rowCount } = await pool.query(
+          'SELECT 1 FROM users WHERE username=$1',
+          [candidate],
+        );
+        if (rowCount === 0) break;
+        i += 1;
+        candidate = `${base}${i}`;
+      }
+      username = candidate;
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      'INSERT INTO users (username, email, password_hash) VALUES ($1,$2,$3) RETURNING id, username, email',
+      [username, email, hashed],
+    );
+    res
+      .status(201)
+      .json({ message: 'User registered successfully', user: result.rows[0] });
+  } catch (e) {
+    if (e.code === '23505')
+      return res
+        .status(409)
+        .json({ message: 'Email or username already exists.' });
+    console.error('Error registering user:', e);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// --- Login API ---
+app.post('/api/login', (req, res, next) => {
+  passport.authenticate('local', (err, user, info) => {
+    if (err) return next(err);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: info?.message || 'Invalid credentials' });
+    }
+    req.logIn(user, (err2) => {
+      if (err2) return next(err2);
+      return res.json({
+        message: 'Logged in successfully',
+        user: { id: user.id, username: user.username, email: user.email },
+      });
+    });
+  })(req, res, next);
+});
+
+// --- Logout API ---
+app.post('/api/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) return res.status(500).json({ message: 'Error logging out' });
+    res.json({ message: 'Logged out successfully' });
+  });
+});
+
+// --- Current Login Status API ---
+app.get('/api/session', (req, res) => {
+  if (!req.user) return res.status(401).json({ authenticated: false });
+  res.json({
+    authenticated: true,
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      email: req.user.email,
+    },
+  });
+});
+
 // --- Health Check ---
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
 
@@ -82,6 +166,10 @@ app.get('/dashboard', requirePageAuth, (req, res) => {
 });
 app.get('/reminder-settings', requirePageAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'reminder-settings.html'));
+});
+
+app.get('/login.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 // --- DB Initialization and Server Start ---
