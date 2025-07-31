@@ -4,6 +4,19 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      test_db:
+        image: postgres:13
+        ports: ['5433:5432']
+        env:
+          POSTGRES_DB: test_meal_log_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        healthcheck:
+          test: ['CMD-SHELL', 'pg_isready -U test_user -d test_meal_log_db']
+          interval: 5s
+          timeout: 5s
+          retries: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
