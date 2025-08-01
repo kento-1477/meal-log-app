@@ -26,7 +26,8 @@ if (url) {
   };
 }
 
-if (process.env.NODE_ENV !== 'production') {
+const isTest = process.env.NODE_ENV === 'test';
+if (!isTest && process.env.NODE_ENV !== 'production') {
   console.log(
     '[db] host/url=%s ssl=%o',
     process.env.DATABASE_URL || process.env.DB_HOST,
