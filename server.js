@@ -9,6 +9,7 @@ const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -156,6 +157,75 @@ function requirePageAuth(req, res, next) {
 // --- API Routes ---
 app.use('/api/meals', requireApiAuth, mealRoutes);
 app.use('/api/reminders', requireApiAuth, reminderRoutes);
+
+// --- Chat Log API ---
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/^image\//.test(file.mimetype))
+      return cb(new Error('only image/* allowed'));
+    cb(null, true);
+  },
+});
+app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
+  try {
+    const file = req.file; // Buffer は file.buffer
+    const message = req.body?.message || '';
+    if (!file && !message)
+      return res
+        .status(400)
+        .json({ ok: false, message: 'message または image が必要です' });
+
+    // ここで “必ず” 表示用の返信文字列を作る
+    const reply = message
+      ? `「${message}」ですね。記録しました。`
+      : '画像を受け取りました。記録しました。';
+
+    let imagePath = null;
+    if (file) {
+      // 画像を保存
+      const filename = `${Date.now()}-${file.originalname}`;
+      imagePath = path.join('uploads', filename);
+      await fs.writeFile(imagePath, file.buffer);
+    }
+
+    // meal_logs テーブルに保存
+    await pool.query(
+      `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, protein, fat, carbs, image_path, memo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        req.user.id, // 認証済みユーザーのID
+        'Chat Log', // 仮のmeal_type
+        message || '画像記録', // テキストメッセージ、または画像記録
+        0, // 仮のカロリー
+        0,
+        0,
+        0, // 仮の栄養素
+        imagePath,
+        message, // メモとしてメッセージを保存
+      ],
+    );
+
+    return res.json({
+      ok: true,
+      reply,
+      meta: { hasImage: !!file },
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, message: 'internal error' });
+  }
+});
+
+// --- Multer Error Handling ---
+app.use((err, req, res, next) => {
+  if (err && err.name === 'MulterError') {
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ ok: false, message: err.message });
+  }
+  next(err);
+});
 
 // --- Protected HTML Routes ---
 app.get('/', requirePageAuth, (req, res) => {
