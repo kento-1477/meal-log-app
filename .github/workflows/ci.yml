@@ -41,4 +41,11 @@ jobs:
         env:
           PGPASSWORD: test_password
 
-      - run: echo "まだテストは無いけど動作確認"
+      - name: Install deps (CI)
+        run: npm ci
+
+      - name: Lint
+        run: npx eslint . --max-warnings=0
+
+      - name: Test
+        run: npm test --if-present
