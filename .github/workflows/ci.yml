@@ -41,11 +41,11 @@ jobs:
         env:
           PGPASSWORD: test_password
 
-      - name: Run Migrations
-        run: npm run migrate:latest -- --env test # テスト環境のknex設定を使用
-
       - name: Install deps (CI)
         run: npm ci
+
+      - name: Run Migrations
+        run: npm run migrate:latest -- --env test # テスト環境のknex設定を使用
 
       - name: Lint
         run: npx eslint . --max-warnings=0
