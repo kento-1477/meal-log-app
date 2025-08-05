@@ -15,7 +15,7 @@ function normalize(raw) {
       tone: toTone(obj.tone),
       dedupe_key: String(obj.dedupe_key || '').trim(),
     };
-  } catch (e) {
+  } catch (_e) {
     return { message: '', tone: 'gentle', dedupe_key: '' };
   }
 }

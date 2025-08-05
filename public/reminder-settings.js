@@ -9,9 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const reminderList = document.getElementById('reminder-list');
   const addReminderBtn = document.getElementById('add-reminder-btn');
   const saveSettingsBtn = document.getElementById('save-settings-btn');
-  const coachingLevelRadios = document.querySelectorAll(
-    'input[name="coaching-level"]',
-  );
   const reminderCardTemplate = document.getElementById(
     'reminder-card-template',
   );
@@ -147,10 +144,10 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ coaching_level: levelEl.value }),
           });
-        } catch (e) {
+        } catch (_e) {
           console.warn(
             'coaching-level 保存はスキップ（API未実装/エラー）:',
-            e?.message || e,
+            _e?.message || _e,
           );
         }
       }

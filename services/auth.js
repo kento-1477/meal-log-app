@@ -18,8 +18,8 @@ function initialize(passport, pool) {
       } else {
         return done(null, false, { message: 'Password incorrect' });
       }
-    } catch (e) {
-      return done(e);
+    } catch (_e) {
+      return done(_e);
     }
   };
 
@@ -31,8 +31,8 @@ function initialize(passport, pool) {
         id,
       ]);
       return done(null, result.rows[0]);
-    } catch (e) {
-      return done(e);
+    } catch (_e) {
+      return done(_e);
     }
   });
 }

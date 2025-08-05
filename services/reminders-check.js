@@ -1,4 +1,4 @@
-const { pool } = require('./db');
+const { _pool } = require('./db');
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -62,14 +62,14 @@ async function runReminderCheck(pool, now = new Date()) {
             AND n.created_at <  date_trunc('minute', $3::timestamptz) + interval '1 minute'
         )
         `,
-        [r.user_id, finalMessage, now.toISOString()],
+        [r.user.id, finalMessage, now.toISOString()],
       );
     }
 
     await client.query('COMMIT');
-  } catch (e) {
+  } catch (_e) {
     await client.query('ROLLBACK');
-    throw e;
+    throw _e;
   } finally {
     client.release();
   }
