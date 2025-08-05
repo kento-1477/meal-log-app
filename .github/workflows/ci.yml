@@ -45,7 +45,7 @@ jobs:
         run: npm ci
 
       - name: Run Migrations
-        run: npm run migrate:latest -- --env test # テスト環境のknex設定を使用
+        run: npm run migrate:reset
 
       - name: Lint
         run: npx eslint . --max-warnings=0

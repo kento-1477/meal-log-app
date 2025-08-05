@@ -16,6 +16,7 @@
     "migrate:make": "knex migrate:make",
     "migrate:latest": "npx knex migrate:latest --env test",
     "migrate:rollback": "knex migrate:rollback",
+    "migrate:reset": "knex migrate:rollback --all --env test && knex migrate:latest --env test",
     "seed:make": "knex seed:make",
     "seed:run": "knex seed:run"
   },
