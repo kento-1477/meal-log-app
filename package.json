@@ -14,7 +14,7 @@
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
     "migrate:make": "knex migrate:make",
-    "migrate:latest": "knex migrate:latest",
+    "migrate:latest": "npx knex migrate:latest --env test",
     "migrate:rollback": "knex migrate:rollback",
     "seed:make": "knex seed:make",
     "seed:run": "knex seed:run"
