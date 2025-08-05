@@ -41,6 +41,9 @@ jobs:
         env:
           PGPASSWORD: test_password
 
+      - name: Run Migrations
+        run: npm run migrate:latest -- --env test # テスト環境のknex設定を使用
+
       - name: Install deps (CI)
         run: npm ci
 
