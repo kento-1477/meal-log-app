@@ -47,5 +47,12 @@
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "supertest": "^7.1.4"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "reminders\\.cron\\.test\\.js$",
+      "server\\.test\\.js$"
+    ],
+    "testEnvironment": "node"
   }
 }

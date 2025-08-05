@@ -7,6 +7,11 @@ jobs:
     name: ci-test-job
     runs-on: ubuntu-latest
 
+    env:
+      NODE_ENV: test
+      ENABLE_CRON: false
+      DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_meal_log_db
+
     services:
       test_db:
         image: postgres:13
