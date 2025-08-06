@@ -1,4 +1,4 @@
-const { createTestUser } = require('./helpers.js');
+const { createTestUser } = require('../tests/utils/createTestUser.js');
 
 // 1. モックを最上部に配置
 jest.mock('../services/auth', () => ({
