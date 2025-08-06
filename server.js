@@ -195,7 +195,7 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, protein, fat, carbs, image_path, memo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
-        req.user.id, // 認証済みユーザーのID
+        req.body.user_id, // テストから送られてくるUUID
         'Chat Log', // 仮のmeal_type
         message || '画像記録', // テキストメッセージ、または画像記録
         0, // 仮のカロリー

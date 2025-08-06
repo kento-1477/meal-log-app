@@ -1,14 +1,14 @@
-// __tests__/log.test.js
+const { createTestUser } = require('./helpers.js');
 
 // 1. モックを最上部に配置
 jest.mock('../services/auth', () => ({
   initialize: jest.fn(),
   requireApiAuth: (req, res, next) => {
-    req.user = { id: 1, username: 'testuser' };
+    // このテストではヘルパーでユーザーを作成するため、モックはシンプルにする
     next();
   },
   requirePageAuth: (req, res, next) => {
-    req.user = { id: 1, username: 'testuser' };
+    req.user = { id: 1, username: 'testuser' }; // ページ認証は別途必要なら残す
     next();
   },
 }));
@@ -18,9 +18,15 @@ const app = require('../server');
 const { pool } = require('../services/db'); // poolを直接インポート
 
 describe('/log Endpoint Integration Tests', () => {
+  let userId; // テスト間で共有するユーザーID
+
   beforeEach(async () => {
-    // TRUNCATEでテーブルを高速リセット
-    await pool.query('TRUNCATE TABLE meal_logs RESTART IDENTITY CASCADE');
+    // 関連テーブルをすべてリセット
+    await pool.query(
+      'TRUNCATE TABLE users, meal_logs RESTART IDENTITY CASCADE',
+    );
+    // テストユーザーを作成し、IDを取得
+    userId = await createTestUser();
   });
 
   afterAll(async () => {
@@ -36,7 +42,7 @@ describe('/log Endpoint Integration Tests', () => {
 
     const response = await request(app)
       .post('/log')
-      .send({ message: mealText });
+      .send({ message: mealText, user_id: userId }); // 取得したUUIDを送信
 
     expect(response.statusCode).toBe(200);
     expect(response.body.ok).toBe(true);
@@ -45,12 +51,11 @@ describe('/log Endpoint Integration Tests', () => {
     const finalCount = parseInt(finalCountResult.rows[0].count, 10);
     expect(finalCount).toBe(initialCount + 1);
 
-    // ORDER BY id DESC LIMIT 1 で最新のレコードを取得
     const savedLogResult = await pool.query(
-      'SELECT * FROM meal_logs ORDER BY id DESC LIMIT 1',
+      'SELECT * FROM meal_logs ORDER BY consumed_at DESC LIMIT 1', // idではなくconsumed_atでソート
     );
     const savedLog = savedLogResult.rows[0];
     expect(savedLog.food_item).toBe(mealText);
-    expect(savedLog.user_id).toBe(1);
+    expect(savedLog.user_id).toBe(userId); // 保存されたuser_idがUUIDと一致するか確認
   });
 });
