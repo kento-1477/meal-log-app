@@ -11,6 +11,7 @@ jobs:
       NODE_ENV: test
       ENABLE_CRON: false
       DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_meal_log_db
+      TEST_DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_meal_log_db
 
     services:
       test_db:
@@ -49,6 +50,15 @@ jobs:
 
       - name: Run Migrations
         run: npm run migrate:reset
+
+      - name: List knex migrations
+        run: npx knex migrate:list --env test
+
+      - name: Debug: list tables
+        run: |
+          psql "$DATABASE_URL" -c '\dt'
+        env:
+          PGPASSWORD: test_password
 
       - name: Lint
         run: npx eslint . --max-warnings=0
