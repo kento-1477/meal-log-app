@@ -57,8 +57,6 @@ jobs:
       - name: Debug: list tables
         run: |
           psql "$DATABASE_URL" -c '\dt'
-        env:
-          PGPASSWORD: test_password
 
       - name: Lint
         run: npx eslint . --max-warnings=0
