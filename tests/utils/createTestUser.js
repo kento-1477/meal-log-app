@@ -1,4 +1,4 @@
-const { pool } = require('../services/db.js');
+const { pool } = require('../../services/db.js');
 
 async function createTestUser() {
   const result = await pool.query(`
