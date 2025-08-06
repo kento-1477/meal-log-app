@@ -101,3 +101,5 @@ exports.down = function (knex) {
     .dropTable('user_profiles')
     .dropTable('users');
 };
+
+exports.config = { transaction: false };
