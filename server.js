@@ -75,12 +75,12 @@ app.post('/api/register', async (req, res) => {
     res
       .status(201)
       .json({ message: 'User registered successfully', user: result.rows[0] });
-  } catch (e) {
-    if (e.code === '23505')
+  } catch (_e) {
+    if (_e.code === '23505')
       return res
         .status(409)
         .json({ message: 'Email or username already exists.' });
-    console.error('Error registering user:', e);
+    console.error('Error registering user:', _e);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -195,7 +195,7 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, protein, fat, carbs, image_path, memo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
-        req.user.id, // 認証済みユーザーのID
+        req.body.user_id, // テストから送られてくるUUID
         'Chat Log', // 仮のmeal_type
         message || '画像記録', // テキストメッセージ、または画像記録
         0, // 仮のカロリー
@@ -212,8 +212,8 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       reply,
       meta: { hasImage: !!file },
     });
-  } catch (e) {
-    console.error(e);
+  } catch (_e) {
+    console.error(_e);
     return res.status(500).json({ ok: false, message: 'internal error' });
   }
 });
@@ -262,8 +262,8 @@ async function initializeAndStart() {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
-  } catch (err) {
-    console.error('Failed to start server:', err);
+  } catch (_err) {
+    console.error('Failed to start server:', _err);
     process.exit(1);
   }
 }

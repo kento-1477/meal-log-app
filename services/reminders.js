@@ -17,7 +17,7 @@ const isAuthenticated = (req, res, next) => {
 };
 
 // Helper function to get coaching level
-async function getCoachingLevel(userId, reminderId = null) {
+async function _getCoachingLevel(userId, reminderId = null) {
   let coachingLevel = 'gentle'; // Default
 
   if (process.env.FEATURE_REMINDER_LEVEL_OVERRIDE === 'true' && reminderId) {
@@ -256,8 +256,8 @@ router.get('/coaching-level', isAuthenticated, async (req, res) => {
       [req.user.id],
     );
     res.json({ coaching_level: r.rows[0]?.coaching_level || 'gentle' });
-  } catch (e) {
-    console.error('GET coaching-level error:', e);
+  } catch (_e) {
+    console.error('GET coaching-level error:', _e);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
@@ -278,8 +278,8 @@ router.post('/coaching-level', isAuthenticated, async (req, res) => {
       [req.user.id, coaching_level],
     );
     res.json({ message: 'ok' });
-  } catch (e) {
-    console.error('POST coaching-level error:', e);
+  } catch (_e) {
+    console.error('POST coaching-level error:', _e);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });

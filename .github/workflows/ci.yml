@@ -20,6 +20,11 @@ jobs:
           POSTGRES_DB: test_meal_log_db
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd="pg_isready -U test_user"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       - uses: actions/checkout@v4
@@ -32,13 +37,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Wait for PostgreSQL to be ready
+      - name: Drop and Recreate Test DB
         run: |
-          until pg_isready -h localhost -p 5433 -U test_user -d test_meal_log_db; do
-            echo "Waiting for database..."
-            sleep 2
-          done
+          psql -h localhost -p 5433 -U test_user -d postgres -c "DROP DATABASE IF EXISTS test_meal_log_db;"
+          psql -h localhost -p 5433 -U test_user -d postgres -c "CREATE DATABASE test_meal_log_db;"
         env:
           PGPASSWORD: test_password
 
-      - run: echo "まだテストは無いけど動作確認"
+      - name: Install deps (CI)
+        run: npm ci
+
+      - name: Run Migrations
+        run: npm run migrate:reset
+
+      - name: Lint
+        run: npx eslint . --max-warnings=0
+
+      - name: Test
+        run: npm test --if-present

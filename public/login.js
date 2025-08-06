@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         loginError.textContent = result.error || 'ログインに失敗しました。';
       }
-    } catch (err) {
+    } catch (_err) {
       loginError.textContent = 'ネットワークエラーが発生しました。';
     }
   });
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         registerError.textContent = result.error || '登録に失敗しました。';
       }
-    } catch (err) {
+    } catch (_err) {
       registerError.textContent = 'ネットワークエラーが発生しました。';
     }
   });

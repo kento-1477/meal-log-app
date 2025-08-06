@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ページロード時に初期データを表示
   loadAndDisplayData(startDateInput.value, endDateInput.value);
   loadAIAdivce();
+  // eslint-disable-next-line no-undef
   loadMealScore();
   loadNotifications(); // 変更
 });

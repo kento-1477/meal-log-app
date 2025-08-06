@@ -11,8 +11,14 @@
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
     "prepare": "husky",
     "test": "NODE_ENV=test ENABLE_CRON=false jest --runInBand",
-    "lint": "eslint . --ext .js,.jsx",
-    "dev": "nodemon start.js"
+    "lint": "eslint . --max-warnings=0",
+    "dev": "nodemon start.js",
+    "migrate:make": "knex migrate:make",
+    "migrate:latest": "npx knex migrate:latest --env test",
+    "migrate:rollback": "knex migrate:rollback",
+    "migrate:reset": "knex migrate:rollback --all --env test && knex migrate:latest --env test",
+    "seed:make": "knex seed:make",
+    "seed:run": "knex seed:run"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
@@ -43,6 +49,7 @@
     "eslint-plugin-import": "^2.32.0",
     "husky": "^9.1.7",
     "jest": "^30.0.5",
+    "knex": "^3.1.0",
     "lint-staged": "^16.1.4",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
