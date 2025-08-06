@@ -20,6 +20,11 @@ jobs:
           POSTGRES_DB: test_meal_log_db
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
+        options: >-
+          --health-cmd="pg_isready -U test_user"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     steps:
       - uses: actions/checkout@v4
@@ -31,15 +36,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
-
-      - name: Wait for PostgreSQL to be ready
-        run: |
-          until pg_isready -h test_db -p 5432 -U test_user; do
-            echo "Waiting for database..."
-            sleep 2
-          done
-        env:
-          PGPASSWORD: test_password
 
       - name: Drop and Recreate Test DB
         run: |
