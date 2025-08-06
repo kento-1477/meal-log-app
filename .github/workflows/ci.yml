@@ -10,7 +10,7 @@ jobs:
     env:
       NODE_ENV: test
       ENABLE_CRON: false
-      DATABASE_URL: postgresql://test_user:test_password@test_db:5432/test_meal_log_db
+      DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_meal_log_db
 
     services:
       test_db:
@@ -39,8 +39,8 @@ jobs:
 
       - name: Drop and Recreate Test DB
         run: |
-          psql -h test_db -U test_user -d postgres -c "DROP DATABASE IF EXISTS test_meal_log_db;"
-          psql -h test_db -U test_user -d postgres -c "CREATE DATABASE test_meal_log_db;"
+          psql -h localhost -p 5433 -U test_user -d postgres -c "DROP DATABASE IF EXISTS test_meal_log_db;"
+          psql -h localhost -p 5433 -U test_user -d postgres -c "CREATE DATABASE test_meal_log_db;"
         env:
           PGPASSWORD: test_password
 
