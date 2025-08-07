@@ -29,9 +29,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint YAML files
+        run: yamllint .github/workflows/*.yml
 
       - name: Install PostgreSQL client
         run: |
@@ -54,7 +65,7 @@ jobs:
       - name: List knex migrations
         run: npx knex migrate:list --env test
 
-      - name: Debug: list tables
+      - name: "Debug: list tables"
         run: |
           psql "$DATABASE_URL" -c '\dt'
 
@@ -63,3 +74,5 @@ jobs:
 
       - name: Test
         run: npm test --if-present
+
+
