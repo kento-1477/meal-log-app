@@ -73,5 +73,14 @@ jobs:
       - name: Lint
         run: npx eslint . --max-warnings=0
 
+      - name: Run DB migrations (test)
+        run: npx knex migrate:latest --env test
+        env:
+          PGHOST: localhost
+          PGPORT: 5433
+          PGDATABASE: test_meal_log_db
+          PGUSER: test_user
+          PGPASSWORD: test_password
+
       - name: Test
         run: npm test --if-present
