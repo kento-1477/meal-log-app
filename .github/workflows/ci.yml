@@ -1,3 +1,4 @@
+---
 name: ci-test
 
 on: [push, pull_request]
@@ -11,6 +12,7 @@ jobs:
       NODE_ENV: test
       ENABLE_CRON: false
       DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_meal_log_db
+      TEST_DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_meal_log_db
 
     services:
       test_db:
@@ -28,9 +30,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint YAML files
+        run: yamllint .github/workflows/*.yml
 
       - name: Install PostgreSQL client
         run: |
@@ -50,8 +63,24 @@ jobs:
       - name: Run Migrations
         run: npm run migrate:reset
 
+      - name: List knex migrations
+        run: npx knex migrate:list --env test
+
+      - name: "Debug: list tables"
+        run: |
+          psql "$DATABASE_URL" -c '\dt'
+
       - name: Lint
         run: npx eslint . --max-warnings=0
+
+      - name: Run DB migrations (test)
+        run: npx knex migrate:latest --env test
+        env:
+          PGHOST: localhost
+          PGPORT: 5433
+          PGDATABASE: test_meal_log_db
+          PGUSER: test_user
+          PGPASSWORD: test_password
 
       - name: Test
         run: npm test --if-present
