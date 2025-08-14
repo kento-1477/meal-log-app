@@ -2,13 +2,12 @@ services:
   test_db:
     image: postgres:13
     environment:
-      POSTGRES_DB: test_db
+      POSTGRES_DB: test_meal_log_db
       POSTGRES_USER: test_user
       POSTGRES_PASSWORD: test_password
     ports:
       - "5433:5432"
     volumes:
-      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
       interval: 5s
