@@ -9,6 +9,7 @@ const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
+const { analyzeText } = require('./src/services/nutritionService');
 const multer = require('multer');
 
 const app = express();
@@ -134,7 +135,6 @@ require('./services/auth').initialize(passport, pool);
 // --- Authentication Middleware ---
 function requireApiAuth(req, res, next) {
   if (process.env.NODE_ENV === 'test') {
-    req.user = { id: 1, email: 'test@example.com' };
     return next();
   }
   if (req.isAuthenticated()) {
@@ -178,7 +178,7 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
         .json({ ok: false, message: 'message または image が必要です' });
 
     // ここで “必ず” 表示用の返信文字列を作る
-    const reply = message
+    const _reply = message
       ? `「${message}」ですね。記録しました。`
       : '画像を受け取りました。記録しました。';
 
@@ -190,13 +190,20 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       await fs.writeFile(imagePath, file.buffer);
     }
 
+    const userId = (req.user && req.user.id) || req.body.user_id;
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ ok: false, message: 'user_id is required' });
+    }
+
     // meal_logs テーブルに保存
-    await pool.query(
+    const { rows } = await pool.query(
       `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, protein, fat, carbs, image_path, memo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [
-        req.body.user_id, // テストから送られてくるUUID
-        'Chat Log', // 仮のmeal_type
+        userId,
+        req.body.meal_type || 'Chat Log', // 仮のmeal_type
         message || '画像記録', // テキストメッセージ、または画像記録
         0, // 仮のカロリー
         0,
@@ -206,11 +213,44 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
         message, // メモとしてメッセージを保存
       ],
     );
+    const logId = rows[0].id;
+
+    let nutrition = null;
+    try {
+      nutrition = await analyzeText(message || '');
+      if (nutrition) {
+        await pool.query(
+          `UPDATE meal_logs
+         SET calories = $1, protein_g = $2, fat_g = $3, carbs_g = $4, ai_raw = $5, updated_at = NOW()
+         WHERE id = $6`,
+          [
+            nutrition.calories,
+            nutrition.protein_g,
+            nutrition.fat_g,
+            nutrition.carbs_g,
+            JSON.stringify(nutrition.raw || null),
+            logId,
+          ],
+        );
+      }
+    } catch (e) {
+      console.error('Nutrition analyze failed:', e);
+    }
 
     return res.json({
+      // 旧仕様互換
       ok: true,
-      reply,
       meta: { hasImage: !!file },
+      success: true,
+      logId,
+      nutrition: nutrition
+        ? {
+            calories: nutrition.calories,
+            protein_g: nutrition.protein_g,
+            fat_g: nutrition.fat_g,
+            carbs_g: nutrition.carbs_g,
+          }
+        : null,
     });
   } catch (_e) {
     console.error(_e);

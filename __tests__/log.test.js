@@ -59,3 +59,9 @@ describe('/log Endpoint Integration Tests', () => {
     expect(savedLog.user_id).toBe(userId); // 保存されたuser_idがUUIDと一致するか確認
   });
 });
+afterAll(async () => {
+  const { pool } = require('../services/db.js');
+  if (pool && !pool.ended) {
+    await pool.end();
+  }
+});
