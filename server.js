@@ -221,8 +221,17 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       if (nutrition) {
         await pool.query(
           `UPDATE meal_logs
-         SET calories = $1, protein_g = $2, fat_g = $3, carbs_g = $4, ai_raw = $5, updated_at = NOW()
-         WHERE id = $6`,
+       SET
+         calories   = $1,
+         protein_g  = $2,
+         fat_g      = $3,
+         carbs_g    = $4,
+         -- 旧カラムも同期（暫定互換）
+         protein    = $2,
+         fat        = $3,
+         carbs      = $4,
+         ai_raw     = $5
+       WHERE id = $6`,
           [
             nutrition.calories,
             nutrition.protein_g,

@@ -46,15 +46,19 @@ describe('/log with nutrition', () => {
     expect(analyzeText).toHaveBeenCalled();
 
     const { rows } = await pool.query(
-      'SELECT calories, protein_g, fat_g, carbs_g FROM meal_logs WHERE id = $1',
+      'SELECT calories, protein_g, fat_g, carbs_g, protein, fat, carbs FROM meal_logs WHERE id = $1',
       [res.body.logId],
     );
-    expect(rows[0]).toMatchObject({
-      calories: expect.any(String), // decimal is returned as string
-      protein_g: expect.any(String),
-      fat_g: expect.any(String),
-      carbs_g: expect.any(String),
-    });
+    const r = rows[0];
+    // 型チェック（pg の numeric は string）
+    expect(r.calories).toEqual(expect.any(String));
+    expect(r.protein_g).toEqual(expect.any(String));
+    expect(r.fat_g).toEqual(expect.any(String));
+    expect(r.carbs_g).toEqual(expect.any(String));
+    // 旧/新カラムが一致していること
+    expect(r.protein).toBe(r.protein_g);
+    expect(r.fat).toBe(r.fat_g);
+    expect(r.carbs).toBe(r.carbs_g);
   });
 });
 afterAll(async () => {
