@@ -178,7 +178,7 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
         .json({ ok: false, message: 'message または image が必要です' });
 
     // ここで “必ず” 表示用の返信文字列を作る
-    const reply = message
+    const _reply = message
       ? `「${message}」ですね。記録しました。`
       : '画像を受け取りました。記録しました。';
 

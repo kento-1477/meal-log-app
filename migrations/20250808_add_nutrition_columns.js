@@ -8,6 +8,6 @@ exports.up = async (knex) => {
       ADD COLUMN IF NOT EXISTS ai_raw JSONB
   `);
 };
-exports.down = async (knex) => {
-  --no - op;
+exports.down = async (_knex) => {
+  // no-op: keep columns to avoid destructive down migration
 };
