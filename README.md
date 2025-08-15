@@ -107,3 +107,26 @@ Visit [http://localhost:3000](http://localhost:3000)
 ## License
 
 MIT
+
+## Local Test (Docker 5433)
+
+```bash
+docker-compose down -v
+docker-compose up -d test_db
+for i in {1..60}; do docker-compose exec -T test_db pg_isready -U test_user -d test_meal_log_db && break; sleep 1; done
+
+# Migrations & Tests
+npm run migrate:latest
+PGHOST=127.0.0.1 PGPORT=5433 PGUSER=test_user PGPASSWORD=test_password PGDATABASE=test_meal_log_db \
+npm test -- --runInBand
+
+ENV keys
+
+TEST_DATABASE_URL=postgres://test_user:test_password@127.0.0.1:5433/test_meal_log_db
+
+Nutritionix（任意 / 未設定時はダミー解析）
+
+NUTRIX_ID=your_app_id
+
+NUTRIX_KEY=your_app_key
+```
