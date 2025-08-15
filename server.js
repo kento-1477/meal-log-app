@@ -9,7 +9,7 @@ const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
-const { analyzeText } = require('./src/services/nutritionService');
+const nutritionService = require('./src/services/nutrition');
 const multer = require('multer');
 
 const app = express();
@@ -217,27 +217,27 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
 
     let nutrition = null;
     try {
-      nutrition = await analyzeText(message || '');
+      nutrition = await nutritionService.analyze({ text: message || '' });
       if (nutrition) {
         await pool.query(
           `UPDATE meal_logs
-       SET
-         calories   = $1,
-         protein_g  = $2,
-         fat_g      = $3,
-         carbs_g    = $4,
-         -- 旧カラムも同期（暫定互換）
-         protein    = $2,
-         fat        = $3,
-         carbs      = $4,
-         ai_raw     = $5
-       WHERE id = $6`,
+           SET
+             calories   = $1,
+             protein_g  = $2,
+             fat_g      = $3,
+             carbs_g    = $4,
+             -- 旧カラムも同期（暫定互換）
+             protein    = $2,
+             fat        = $3,
+             carbs      = $4,
+             ai_raw     = $5
+           WHERE id = $6`,
           [
             nutrition.calories,
             nutrition.protein_g,
             nutrition.fat_g,
             nutrition.carbs_g,
-            JSON.stringify(nutrition.raw || null),
+            nutrition, // json/jsonb カラムにそのまま突っ込む
             logId,
           ],
         );

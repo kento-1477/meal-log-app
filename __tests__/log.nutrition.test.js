@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../server'); // export されていること
-jest.mock('../src/services/nutritionService', () => ({
-  analyzeText: jest.fn(async () => ({
+jest.mock('../src/services/nutrition', () => ({
+  analyze: jest.fn(async () => ({
     calories: 450,
     protein_g: 30,
     fat_g: 12,
@@ -10,7 +10,7 @@ jest.mock('../src/services/nutritionService', () => ({
   })),
 }));
 const { createTestUser } = require('../tests/utils/createTestUser.js');
-const { analyzeText } = require('../src/services/nutritionService');
+const { analyze } = require('../src/services/nutrition');
 const { pool } = require('../services/db.js'); // or knex に合わせて
 
 describe('/log with nutrition', () => {
@@ -43,7 +43,7 @@ describe('/log with nutrition', () => {
       fat_g: 12,
       carbs_g: 50,
     });
-    expect(analyzeText).toHaveBeenCalled();
+    expect(analyze).toHaveBeenCalled();
 
     const { rows } = await pool.query(
       'SELECT calories, protein_g, fat_g, carbs_g, protein, fat, carbs FROM meal_logs WHERE id = $1',
