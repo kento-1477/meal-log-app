@@ -9,6 +9,7 @@ jest.mock('../src/services/nutritionService', () => ({
     raw: { mocked: true },
   })),
 }));
+const { createTestUser } = require('../tests/utils/createTestUser.js');
 const { analyzeText } = require('../src/services/nutritionService');
 const { pool } = require('../services/db.js'); // or knex に合わせて
 
@@ -19,12 +20,16 @@ describe('/log with nutrition', () => {
   });
 
   beforeEach(async () => {
-    await pool.query('TRUNCATE TABLE meal_logs RESTART IDENTITY CASCADE');
+    await pool.query(
+      'TRUNCATE TABLE users, meal_logs RESTART IDENTITY CASCADE',
+    );
   });
 
   it('should insert meal, analyze nutrition, update row and respond with nutrition', async () => {
+    const userId = await createTestUser();
     const res = await request(app)
       .post('/log')
+      .field('user_id', userId)
       .field('meal_type', 'dinner')
       .field('description', 'grilled chicken with rice')
       .attach('image', Buffer.from('fake'), 'fake.jpg');
@@ -51,4 +56,10 @@ describe('/log with nutrition', () => {
       carbs_g: expect.any(String),
     });
   });
+});
+afterAll(async () => {
+  const { pool } = require('../services/db.js');
+  if (pool && !pool.ended) {
+    await pool.end();
+  }
 });

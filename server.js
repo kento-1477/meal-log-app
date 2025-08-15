@@ -9,7 +9,7 @@ const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
-const { analyzeText } = require('./services/nutritionService');
+const { analyzeText } = require('./src/services/nutritionService');
 const multer = require('multer');
 
 const app = express();
@@ -135,7 +135,6 @@ require('./services/auth').initialize(passport, pool);
 // --- Authentication Middleware ---
 function requireApiAuth(req, res, next) {
   if (process.env.NODE_ENV === 'test') {
-    req.user = { id: 1, email: 'test@example.com' };
     return next();
   }
   if (req.isAuthenticated()) {
@@ -191,12 +190,19 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       await fs.writeFile(imagePath, file.buffer);
     }
 
+    const userId = (req.user && req.user.id) || req.body.user_id;
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ ok: false, message: 'user_id is required' });
+    }
+
     // meal_logs テーブルに保存
     const { rows } = await pool.query(
       `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, protein, fat, carbs, image_path, memo)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [
-        req.user.id,
+        userId,
         req.body.meal_type || 'Chat Log', // 仮のmeal_type
         message || '画像記録', // テキストメッセージ、または画像記録
         0, // 仮のカロリー
@@ -232,6 +238,9 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
     }
 
     return res.json({
+      // 旧仕様互換
+      ok: true,
+      meta: { hasImage: !!file },
       success: true,
       logId,
       nutrition: nutrition
