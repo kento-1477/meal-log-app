@@ -13,7 +13,6 @@ const nutritionService = require('./src/services/nutrition');
 const multer = require('multer');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // --- Middleware ---
 app.use(express.json());
