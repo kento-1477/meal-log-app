@@ -291,34 +291,12 @@ app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// --- DB Initialization and Server Start ---
-async function initializeAndStart() {
-  try {
-    try {
-      const schemaPath = path.join(__dirname, 'schema.sql');
-      const schemaSQL = await fs.readFile(schemaPath, 'utf8');
-      await pool.query(schemaSQL);
-      console.log('Database schema checked/initialized.');
-    } catch (schemaError) {
-      if (schemaError.code === 'ENOENT') {
-        console.log('schema.sql not found, skipping initialization.');
-      } else {
-        console.error('Fatal: Error applying schema.sql:', schemaError);
-        process.exit(1); // 致命的なエラーの場合は終了
-      }
-    }
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  } catch (_err) {
-    console.error('Failed to start server:', _err);
-    process.exit(1);
-  }
-}
-
-if (process.env.NODE_ENV !== 'test') {
-  initializeAndStart();
-}
-
 module.exports = app;
+
+// Compatibility shim for environments that still run `node server.js` directly
+if (require.main === module && process.env.NODE_ENV !== 'test') {
+  console.warn(
+    'Running server.js directly is deprecated. Please use start.js instead.',
+  );
+  require('./start');
+}
