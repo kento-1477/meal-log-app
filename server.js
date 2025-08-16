@@ -9,11 +9,10 @@ const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
-const { analyzeText } = require('./src/services/nutritionService');
+const nutritionService = require('./src/services/nutrition');
 const multer = require('multer');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // --- Middleware ---
 app.use(express.json());
@@ -217,27 +216,27 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
 
     let nutrition = null;
     try {
-      nutrition = await analyzeText(message || '');
+      nutrition = await nutritionService.analyze({ text: message || '' });
       if (nutrition) {
         await pool.query(
           `UPDATE meal_logs
-       SET
-         calories   = $1,
-         protein_g  = $2,
-         fat_g      = $3,
-         carbs_g    = $4,
-         -- 旧カラムも同期（暫定互換）
-         protein    = $2,
-         fat        = $3,
-         carbs      = $4,
-         ai_raw     = $5
-       WHERE id = $6`,
+           SET
+             calories   = $1,
+             protein_g  = $2,
+             fat_g      = $3,
+             carbs_g    = $4,
+             -- 旧カラムも同期（暫定互換）
+             protein    = $2,
+             fat        = $3,
+             carbs      = $4,
+             ai_raw     = $5
+           WHERE id = $6`,
           [
             nutrition.calories,
             nutrition.protein_g,
             nutrition.fat_g,
             nutrition.carbs_g,
-            JSON.stringify(nutrition.raw || null),
+            nutrition, // json/jsonb カラムにそのまま突っ込む
             logId,
           ],
         );
@@ -291,34 +290,12 @@ app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// --- DB Initialization and Server Start ---
-async function initializeAndStart() {
-  try {
-    try {
-      const schemaPath = path.join(__dirname, 'schema.sql');
-      const schemaSQL = await fs.readFile(schemaPath, 'utf8');
-      await pool.query(schemaSQL);
-      console.log('Database schema checked/initialized.');
-    } catch (schemaError) {
-      if (schemaError.code === 'ENOENT') {
-        console.log('schema.sql not found, skipping initialization.');
-      } else {
-        console.error('Fatal: Error applying schema.sql:', schemaError);
-        process.exit(1); // 致命的なエラーの場合は終了
-      }
-    }
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  } catch (_err) {
-    console.error('Failed to start server:', _err);
-    process.exit(1);
-  }
-}
-
-if (process.env.NODE_ENV !== 'test') {
-  initializeAndStart();
-}
-
 module.exports = app;
+
+// Compatibility shim for environments that still run `node server.js` directly
+if (require.main === module && process.env.NODE_ENV !== 'test') {
+  console.warn(
+    'Running server.js directly is deprecated. Please use start.js instead.',
+  );
+  require('./start');
+}
