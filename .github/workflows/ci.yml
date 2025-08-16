@@ -84,3 +84,6 @@ jobs:
 
       - name: Test
         run: npm test --if-present
+        env:
+          GEMINI_MOCK: '1'
+          NUTRITION_PROVIDER: 'gemini'

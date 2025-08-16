@@ -9,10 +9,10 @@ const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
+const nutritionService = require('./src/services/nutrition');
 const multer = require('multer');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // --- Middleware ---
 app.use(express.json());
@@ -134,7 +134,6 @@ require('./services/auth').initialize(passport, pool);
 // --- Authentication Middleware ---
 function requireApiAuth(req, res, next) {
   if (process.env.NODE_ENV === 'test') {
-    req.user = { id: 1, email: 'test@example.com' };
     return next();
   }
   if (req.isAuthenticated()) {
@@ -178,7 +177,7 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
         .json({ ok: false, message: 'message または image が必要です' });
 
     // ここで “必ず” 表示用の返信文字列を作る
-    const reply = message
+    const _reply = message
       ? `「${message}」ですね。記録しました。`
       : '画像を受け取りました。記録しました。';
 
@@ -190,13 +189,20 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       await fs.writeFile(imagePath, file.buffer);
     }
 
+    const userId = (req.user && req.user.id) || req.body.user_id;
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ ok: false, message: 'user_id is required' });
+    }
+
     // meal_logs テーブルに保存
-    await pool.query(
+    const { rows } = await pool.query(
       `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, protein, fat, carbs, image_path, memo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
       [
-        req.body.user_id, // テストから送られてくるUUID
-        'Chat Log', // 仮のmeal_type
+        userId,
+        req.body.meal_type || 'Chat Log', // 仮のmeal_type
         message || '画像記録', // テキストメッセージ、または画像記録
         0, // 仮のカロリー
         0,
@@ -206,11 +212,53 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
         message, // メモとしてメッセージを保存
       ],
     );
+    const logId = rows[0].id;
+
+    let nutrition = null;
+    try {
+      nutrition = await nutritionService.analyze({ text: message || '' });
+      if (nutrition) {
+        await pool.query(
+          `UPDATE meal_logs
+           SET
+             calories   = $1,
+             protein_g  = $2,
+             fat_g      = $3,
+             carbs_g    = $4,
+             -- 旧カラムも同期（暫定互換）
+             protein    = $2,
+             fat        = $3,
+             carbs      = $4,
+             ai_raw     = $5
+           WHERE id = $6`,
+          [
+            nutrition.calories,
+            nutrition.protein_g,
+            nutrition.fat_g,
+            nutrition.carbs_g,
+            nutrition, // json/jsonb カラムにそのまま突っ込む
+            logId,
+          ],
+        );
+      }
+    } catch (e) {
+      console.error('Nutrition analyze failed:', e);
+    }
 
     return res.json({
+      // 旧仕様互換
       ok: true,
-      reply,
       meta: { hasImage: !!file },
+      success: true,
+      logId,
+      nutrition: nutrition
+        ? {
+            calories: nutrition.calories,
+            protein_g: nutrition.protein_g,
+            fat_g: nutrition.fat_g,
+            carbs_g: nutrition.carbs_g,
+          }
+        : null,
     });
   } catch (_e) {
     console.error(_e);
@@ -242,34 +290,12 @@ app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// --- DB Initialization and Server Start ---
-async function initializeAndStart() {
-  try {
-    try {
-      const schemaPath = path.join(__dirname, 'schema.sql');
-      const schemaSQL = await fs.readFile(schemaPath, 'utf8');
-      await pool.query(schemaSQL);
-      console.log('Database schema checked/initialized.');
-    } catch (schemaError) {
-      if (schemaError.code === 'ENOENT') {
-        console.log('schema.sql not found, skipping initialization.');
-      } else {
-        console.error('Fatal: Error applying schema.sql:', schemaError);
-        process.exit(1); // 致命的なエラーの場合は終了
-      }
-    }
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  } catch (_err) {
-    console.error('Failed to start server:', _err);
-    process.exit(1);
-  }
-}
-
-if (process.env.NODE_ENV !== 'test') {
-  initializeAndStart();
-}
-
 module.exports = app;
+
+// Compatibility shim for environments that still run `node server.js` directly
+if (require.main === module && process.env.NODE_ENV !== 'test') {
+  console.warn(
+    'Running server.js directly is deprecated. Please use start.js instead.',
+  );
+  require('./start');
+}

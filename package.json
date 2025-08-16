@@ -7,7 +7,7 @@
   },
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node start.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
     "prepare": "husky",
     "test": "NODE_ENV=test ENABLE_CRON=false jest --runInBand",

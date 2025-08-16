@@ -9,7 +9,7 @@ Next‑gen food tracking app that lets users log meals by simply chatting or sen
 | Category              | Details                                                                                           |
 | --------------------- | ------------------------------------------------------------------------------------------------- |
 | **Chat Logging**      | `/log` endpoint accepts text or image uploads → AI (Gemini) estimates nutrition → reply sent back |
-| **Image → Nutrition** | `services/pfc.js` (planned) runs vision model + food‑db lookup                                    |
+| **Image → Nutrition** | `services/nutrition/providers/geminiProvider.js` uses Gemini API to estimate PFC from text.       |
 | **AI Advice**         | Gemini generates personalised tips shown on dashboard                                             |
 | **Reminders / Cron**  | Scheduled coaching messages (gentle/intense) avoiding duplicates                                  |
 | **Auth**              | Passport‑local sessions stored in PG `connect-pg-simple`                                          |
@@ -29,7 +29,9 @@ meal-log-app/
 │  │   ├─ reminder.js           # cron endpoints
 │  │   └─ auth.js
 │  ├─ services/
-│  │   ├─ pfc.js                # image→PFC estimation
+│  │   ├─ nutrition/            # Nutrition analysis provider
+│  │   │  ├─ providers/geminiProvider.js
+│  │   │  └─ index.js
 │  │   └─ mealLog.js            # DB layer
 │  ├─ models/                   # ORMapper definitions
 │  └─ server.js                 # app initialiser
@@ -107,3 +109,36 @@ Visit [http://localhost:3000](http://localhost:3000)
 ## License
 
 MIT
+
+## Local Test (Docker 5433)
+
+```bash
+docker-compose down -v
+docker-compose up -d test_db
+for i in {1..60}; do docker-compose exec -T test_db pg_isready -U test_user -d test_meal_log_db && break; sleep 1; done
+
+# Migrations & Tests
+npm run migrate:latest
+PGHOST=127.0.0.1 PGPORT=5433 PGUSER=test_user PGPASSWORD=test_password PGDATABASE=test_meal_log_db \
+npm test -- --runInBand
+
+ENV keys
+
+TEST_DATABASE_URL=postgres://test_user:test_password@127.0.0.1:5433/test_meal_log_db
+
+# Nutrition Provider
+NUTRITION_PROVIDER=gemini
+GEMINI_MODEL=gemini-1.5-flash
+GEMINI_API_KEY=your_key_here
+GEMINI_MOCK=0
+
+Nutritionix（任意 / 未設定時はダミー解析）
+
+NUTRIX_ID=your_app_id
+
+NUTRIX_KEY=your_app_key
+```
+
+```
+
+```
