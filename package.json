@@ -14,11 +14,15 @@
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
     "migrate:make": "knex migrate:make",
-    "migrate:latest": "npx knex migrate:latest --env test",
     "migrate:rollback": "knex migrate:rollback",
-    "migrate:reset": "knex migrate:rollback --all --env test && knex migrate:latest --env test",
+    "migrate:reset": "dotenv -e .env.test -- knex migrate:rollback --all && npm run migrate:test",
     "seed:make": "knex seed:make",
-    "seed:run": "knex seed:run"
+    "migrate:dev": "dotenv -e .env.development -- knex migrate:latest",
+    "seed:dev": "dotenv -e .env.development -- knex seed:run",
+    "migrate:test": "dotenv -e .env.test -- knex migrate:latest",
+    "migrate:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex migrate:latest'",
+    "seed:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex seed:run'",
+    "psql:prod": "dotenv -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
@@ -44,6 +48,8 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
+    "dotenv-cli": "^7.4.2",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
