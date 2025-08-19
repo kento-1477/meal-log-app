@@ -20,8 +20,8 @@
     "migrate:dev": "dotenv -e .env.development -- knex migrate:latest",
     "seed:dev": "dotenv -e .env.development -- knex seed:run",
     "migrate:test": "dotenv -e .env.test -- knex migrate:latest",
-    "migrate:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex migrate:latest'",
-    "seed:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex seed:run'",
+    "migrate:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"\" npx knex migrate:latest --env production'",
+    "seed:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"\" npx knex seed:run --env production'",
     "psql:prod": "dotenv -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --"
   },
   "lint-staged": {
@@ -38,7 +38,7 @@
     "csv-parser": "^3.2.0",
     "csv-stringify": "^6.6.0",
     "csv-writer": "^1.6.0",
-    "dotenv": "^17.2.1",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "express-session": "^1.18.2",
     "multer": "^2.0.2",
