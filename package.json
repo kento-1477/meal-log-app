@@ -14,11 +14,15 @@
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
     "migrate:make": "knex migrate:make",
-    "migrate:latest": "npx knex migrate:latest --env test",
     "migrate:rollback": "knex migrate:rollback",
-    "migrate:reset": "knex migrate:rollback --all --env test && knex migrate:latest --env test",
+    "migrate:reset": "dotenv -e .env.test -- knex migrate:rollback --all && npm run migrate:test",
     "seed:make": "knex seed:make",
-    "seed:run": "knex seed:run"
+    "migrate:dev": "dotenv -e .env.development -- knex migrate:latest",
+    "seed:dev": "dotenv -e .env.development -- knex seed:run",
+    "migrate:test": "dotenv -e .env.test -- knex migrate:latest",
+    "migrate:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"\" npx knex migrate:latest --env production'",
+    "seed:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"\" npx knex seed:run --env production'",
+    "psql:prod": "dotenv -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
@@ -34,7 +38,7 @@
     "csv-parser": "^3.2.0",
     "csv-stringify": "^6.6.0",
     "csv-writer": "^1.6.0",
-    "dotenv": "^17.2.1",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "express-session": "^1.18.2",
     "multer": "^2.0.2",
@@ -44,13 +48,14 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
-    "eslint": "^9.33.0",
+    "dotenv-cli": "^7.4.4",
+    "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "husky": "^9.1.7",
     "jest": "^30.0.5",
     "knex": "^3.1.0",
-    "lint-staged": "^16.1.5",
+    "lint-staged": "^16.1.4",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "supertest": "^7.1.4"

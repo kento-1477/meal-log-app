@@ -1,22 +1,20 @@
-// services/db.js
 const { Pool } = require('pg');
+const { buildPgConnection } = require('./db-config');
 
-const isTest = process.env.NODE_ENV === 'test';
-const urlFromEnv =
-  (isTest && (process.env.TEST_DATABASE_URL || process.env.DATABASE_URL)) ||
-  process.env.DATABASE_URL;
+const env = process.env.NODE_ENV || 'development';
+const connectionConfig = buildPgConnection(env);
 
-const connection = urlFromEnv
-  ? { connectionString: urlFromEnv }
-  : {
-      host: process.env.DB_HOST || (isTest ? '127.0.0.1' : '127.0.0.1'),
-      port: Number(process.env.DB_PORT || (isTest ? 5433 : 5432)),
-      user: process.env.DB_USER || (isTest ? 'test_user' : 'postgres'),
-      password: process.env.DB_PASSWORD || (isTest ? 'test_password' : ''),
-      database: isTest
-        ? process.env.TEST_DB_DATABASE || 'test_meal_log_db'
-        : process.env.DB_DATABASE || 'meal_log_db',
-    };
+// Log SSL status for easier debugging on startup, but not during tests.
+if (env !== 'test') {
+  const useSSL = !!connectionConfig.ssl;
+  const verify = useSSL
+    ? Boolean(connectionConfig.ssl && connectionConfig.ssl.rejectUnauthorized)
+    : 'N/A';
+  console.log(
+    `DB Connection[${env}]: SSL ${useSSL ? 'enabled' : 'disabled'}. Verification: ${verify}`,
+  );
+}
 
-const pool = new Pool(connection);
+const pool = new Pool(connectionConfig);
+
 module.exports = { pool };
