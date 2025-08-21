@@ -3,6 +3,7 @@ let app;
 
 // Mock the auth middleware to always pass for tests
 jest.mock('../services/auth', () => ({
+  initialize: jest.fn(), // Add mock for initialize
   requireApiAuth: (req, res, next) => {
     req.user = { id: 'test-user', email: 'test@example.com' };
     next();
