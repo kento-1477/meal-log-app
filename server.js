@@ -359,19 +359,15 @@ app.post(
         return res.status(409).json({ ok: false, message: 'conflict' });
       }
 
-      return res.json({
-        ok: true,
-        logId,
-        nutrition: {
+      return res.json(
+        toApiPayload({
+          id: logId,
           dish,
-          protein_g: P,
-          fat_g: F,
-          carbs_g: C,
-          calories: kcal,
           confidence,
-        },
-        breakdown: newBreakdown,
-      });
+          nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
+          breakdown: newBreakdown,
+        }),
+      );
     } catch (e) {
       console.error('POST /log/choose-slot error', e);
       return res.status(500).json({ ok: false, message: 'internal error' });
