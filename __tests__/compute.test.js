@@ -1,4 +1,4 @@
-const { computeFromItems } = require('../../src/services/nutrition/compute');
+const { computeFromItems } = require('../src/services/nutrition/compute');
 
 test('rice size impact', () => {
   const base = [{ code: 'rice_cooked', qty_g: 150, include: true }];
