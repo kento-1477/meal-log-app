@@ -19,8 +19,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
-    if (!/^image\//.test(file.mimetype))
-      return cb(new Error('only image/* allowed'));
+    if (file && !/^image\//.test(file.mimetype)) return cb(null, false); // ファイル無視
     cb(null, true);
   },
 });
