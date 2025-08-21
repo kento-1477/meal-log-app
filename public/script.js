@@ -44,11 +44,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // チャット履歴をローカルストレージに保存する関数
   function saveChatHistory(entry) {
     try {
-      const KEY = 'chatHistory';
-      const prev = JSON.parse(localStorage.getItem(KEY) || '[]');
+      const prev = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || '[]');
       // 期待スキーマ：{ text, sender, imageUrl, ts }
       prev.push({ ...entry, ts: Date.now() });
-      localStorage.setItem(KEY, JSON.stringify(prev));
+      localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(prev));
     } catch (_) {
       // Safariのプライベートモード等で例外になっても黙殺
     }
