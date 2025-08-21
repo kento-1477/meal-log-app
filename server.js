@@ -14,6 +14,12 @@ const multer = require('multer');
 
 const app = express();
 
+// 1) 認証/セッションより前にヘルスチェックを定義（Renderのヘルスチェック用）
+app.get('/healthz', (_req, res) => {
+  res.status(200).send('ok');
+});
+console.log('Health check endpoint ready at /healthz');
+
 // --- Middleware ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -123,16 +129,6 @@ app.get('/api/session', (req, res) => {
       email: req.user.email,
     },
   });
-});
-
-// --- Health Check ---
-app.get('/healthz', async (_req, res) => {
-  try {
-    await pool.query('select 1');
-    res.status(200).send('ok');
-  } catch {
-    res.status(500).send('db_ng');
-  }
 });
 
 // --- Passport Configuration ---
@@ -295,6 +291,21 @@ app.get('/reminder-settings', requirePageAuth, (req, res) => {
 
 app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// 2) パスポートのセッション復元失敗を無害化するエラーハンドラ（最後尾）
+app.use((err, req, res, next) => {
+  if (err && /deserialize user/i.test(err.message || '')) {
+    try {
+      if (req.session) req.session.destroy(() => {});
+      // 使っているクッキー名が既定なら connect.sid
+      res.clearCookie('connect.sid', { path: '/' });
+    } catch (_) {
+      // ignore errors
+    }
+    return res.status(401).json({ error: 'Session expired' });
+  }
+  return next(err);
 });
 
 module.exports = app;

@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node start.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
-    "test": "NODE_ENV=test ENABLE_CRON=false jest --runInBand",
+    "test": "PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false jest --runInBand",
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
     "migrate:make": "knex migrate:make",
