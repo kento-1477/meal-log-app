@@ -12,6 +12,7 @@ const reminderRoutes = require('./services/reminders');
 const nutritionService = require('./src/services/nutrition');
 const multer = require('multer');
 
+const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'connect.sid';
 const app = express();
 
 // 1) 認証/セッションより前にヘルスチェックを定義（Renderのヘルスチェック用）
@@ -28,6 +29,7 @@ const isProd = process.env.NODE_ENV === 'production';
 app.set('trust proxy', 1);
 app.use(
   session({
+    name: SESSION_COOKIE_NAME,
     store: new pgSession({
       pool,
       tableName: 'session',
