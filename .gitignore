@@ -3,3 +3,9 @@ node_modules/
 .env
 /uploads/
 .env*
+
+# Temporary files
+/data/*
+!/data/meal_log.csv
+/scripts/db/*
+!/scripts/db/init_app_user.sql

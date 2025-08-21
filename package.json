@@ -9,7 +9,6 @@
   "scripts": {
     "start": "node start.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
-    "prepare": "husky",
     "test": "NODE_ENV=test ENABLE_CRON=false jest --runInBand",
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
@@ -17,12 +16,13 @@
     "migrate:rollback": "knex migrate:rollback",
     "migrate:reset": "dotenv -e .env.test -- knex migrate:rollback --all && npm run migrate:test",
     "seed:make": "knex seed:make",
-    "migrate:dev": "dotenv -e .env.development -- knex migrate:latest",
-    "seed:dev": "dotenv -e .env.development -- knex seed:run",
-    "migrate:test": "dotenv -e .env.test -- knex migrate:latest",
-    "migrate:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"\" npx knex migrate:latest --env production'",
-    "seed:prod": "dotenv -e .env.production -- sh -c 'DATABASE_URL=\"\" npx knex seed:run --env production'",
-    "psql:prod": "dotenv -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --"
+    "migrate:dev": "npx dotenv-cli -e .env.development -- npx knex migrate:latest",
+    "seed:dev": "npx dotenv-cli -e .env.development -- npx knex seed:run",
+    "migrate:test": "npx dotenv-cli -e .env.test -- npx knex migrate:latest",
+    "migrate:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex migrate:latest'",
+    "seed:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex seed:run'",
+    "psql:prod": "npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --",
+    "psql:app": "env -u DATABASE_URL npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL\" \"$@\"' --"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
@@ -33,7 +33,6 @@
   },
   "dependencies": {
     "axios": "^1.11.0",
-    "bcrypt": "^6.0.0",
     "connect-pg-simple": "^10.0.0",
     "csv-parser": "^3.2.0",
     "csv-stringify": "^6.6.0",
@@ -45,9 +44,12 @@
     "node-cron": "^4.2.1",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "update": "^0.7.4"
   },
   "devDependencies": {
+    "bcrypt": "^6.0.0",
+    "cross-env": "^10.0.0",
     "dotenv-cli": "^7.4.4",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
