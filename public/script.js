@@ -298,7 +298,7 @@ function addMessage(text, sender, imageUrl = null, save = true) {
   const _chatBox = document.getElementById('chat-box');
   if (typeof text === 'object' && text.nodeType === 1) {
     // Check if text is a DOM element
-    chatBox.appendChild(text);
+    _chatBox.appendChild(text);
   } else {
     const messageElement = document.createElement('div');
     messageElement.classList.add('message', `${sender}-message`);
@@ -314,10 +314,10 @@ function addMessage(text, sender, imageUrl = null, save = true) {
       imageNode.src = imageUrl;
       messageElement.appendChild(imageNode);
     }
-    chatBox.appendChild(messageElement);
+    _chatBox.appendChild(messageElement);
   }
 
-  chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
+  _chatBox.scrollTop = _chatBox.scrollHeight; // Auto-scroll
 
   if (save && typeof text === 'string') {
     // Only save string messages
