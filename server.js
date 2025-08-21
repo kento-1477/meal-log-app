@@ -233,7 +233,38 @@ app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
       },
       version: 0,
     };
-    if (process.env.NODE_ENV === 'test') inmemLogs.set(id, log);
+
+    if (process.env.NODE_ENV === 'test') {
+      inmemLogs.set(id, log);
+    } else {
+      // 本番系（DB保存）
+      const { rows: insertRows } = await pool.query(
+        `INSERT INTO meal_logs (user_id, meal_type, food_item, memo, dish, confidence, protein_g, fat_g, carbs_g, calories, ai_raw, version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, version`,
+        [
+          req.user.id,
+          'Chat Log',
+          message || '画像記録',
+          message,
+          log.dish,
+          log.confidence,
+          log.nutrition.protein_g,
+          log.nutrition.fat_g,
+          log.nutrition.carbs_g,
+          log.nutrition.calories,
+          JSON.stringify({
+            breakdown: log.breakdown,
+            snapshot: log.snapshot,
+            model: 'gemini-pro',
+            input: { message },
+            at: new Date().toISOString(),
+          }),
+          log.version,
+        ],
+      );
+      log.id = insertRows[0].id; // Update log ID with DB generated ID
+      log.version = insertRows[0].version; // Update log version with DB generated version
+    }
 
     // 4) 返却（E2E要件を満たす）
     return res.json(toApiPayload(log));
@@ -283,8 +314,64 @@ app.post(
         return res.json(toApiPayload(updated));
       }
 
-      // 本番系（DB保存）は後続で実装でもOK
-      return res.status(501).json({ ok: false, message: 'not implemented' });
+      // 本番系（DB保存）
+      const { rows, rowCount } = await pool.query(
+        `SELECT id, ai_raw, version FROM meal_logs WHERE id=$1 AND user_id=$2`,
+        [logId, req.user.id],
+      );
+      if (rowCount === 0) {
+        return res.status(404).json({ ok: false, message: 'not found' });
+      }
+
+      const { ai_raw, version } = rows[0];
+      const currentItems = ai_raw?.breakdown?.items || [];
+      const updatedItems = applySlot(currentItems, { key, value });
+
+      const {
+        P,
+        F,
+        C,
+        kcal,
+        warnings,
+        items: normItems,
+      } = computeFromItems(updatedItems);
+      const slots = buildSlots(normItems);
+
+      const dish = ai_raw?.dish || null;
+      const confidence = ai_raw?.confidence ?? 0.7;
+      const newBreakdown = {
+        items: normItems,
+        slots: { rice_size: slots.riceSlot, pork_cut: slots.porkSlot },
+        warnings,
+      };
+
+      const { rowCount: updateCount } = await pool.query(
+        `UPDATE meal_logs SET 
+         protein_g=$1, fat_g=$2, carbs_g=$3, calories=$4, 
+         ai_raw = jsonb_set(ai_raw, '{breakdown}', $5::jsonb, true), 
+         version = version + 1, 
+         protein=$1, fat=$2, carbs=$3 -- legacy columns
+       WHERE id=$6 AND version=$7`,
+        [P, F, C, kcal, JSON.stringify(newBreakdown), logId, version],
+      );
+
+      if (updateCount === 0) {
+        return res.status(409).json({ ok: false, message: 'conflict' });
+      }
+
+      return res.json({
+        ok: true,
+        logId,
+        nutrition: {
+          dish,
+          protein_g: P,
+          fat_g: F,
+          carbs_g: C,
+          calories: kcal,
+          confidence,
+        },
+        breakdown: newBreakdown,
+      });
     } catch (e) {
       console.error('POST /log/choose-slot error', e);
       return res.status(500).json({ ok: false, message: 'internal error' });
