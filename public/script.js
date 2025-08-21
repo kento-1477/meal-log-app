@@ -33,8 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
       messageElement.appendChild(imageNode);
     }
 
-    chatBox.appendChild(messageElement);
-    chatBox.scrollTop = chatBox.scrollHeight; // 自動スクロール
+    _chatBox.appendChild(messageElement);
+    _chatBox.scrollTop = _chatBox.scrollHeight; // 自動スクロール
 
     if (save) {
       saveChatHistory({ text, sender, imageUrl });
