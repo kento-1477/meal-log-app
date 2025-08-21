@@ -174,102 +174,130 @@ const upload = multer({
 });
 app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
   try {
-    const file = req.file; // Buffer は file.buffer
+    const file = req.file;
     const message = req.body?.message || '';
     if (!file && !message)
       return res
         .status(400)
-        .json({ ok: false, message: 'message または image が必要です' });
+        .json({ ok: false, message: 'message or image is required' });
 
-    // ここで “必ず” 表示用の返信文字列を作る
-    const _reply = message
-      ? `「${message}」ですね。記録しました。`
-      : '画像を受け取りました。記録しました。';
-
-    let imagePath = null;
-    if (file) {
-      // 画像を保存
-      const filename = `${Date.now()}-${file.originalname}`;
-      imagePath = path.join('uploads', filename);
-      await fs.writeFile(imagePath, file.buffer);
-    }
-
-    const userId = (req.user && req.user.id) || req.body.user_id;
-    if (!userId) {
-      return res
-        .status(400)
-        .json({ ok: false, message: 'user_id is required' });
-    }
-
-    // meal_logs テーブルに保存
+    const userId = req.user.id;
     const { rows } = await pool.query(
-      `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, protein, fat, carbs, image_path, memo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-      [
-        userId,
-        req.body.meal_type || 'Chat Log', // 仮のmeal_type
-        message || '画像記録', // テキストメッセージ、または画像記録
-        0, // 仮のカロリー
-        0,
-        0,
-        0, // 仮の栄養素
-        imagePath,
-        message, // メモとしてメッセージを保存
-      ],
+      `INSERT INTO meal_logs (user_id, meal_type, food_item, memo) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [userId, 'Chat Log', message || '画像記録', message],
     );
     const logId = rows[0].id;
 
-    let nutrition = null;
     try {
-      nutrition = await nutritionService.analyze({ text: message || '' });
-      if (nutrition) {
+      const payload = await nutritionService.analyze({ text: message || '' });
+      if (payload) {
+        const { dish, confidence, nutrition, breakdown, snapshot } = payload;
         await pool.query(
-          `UPDATE meal_logs
-           SET
-             calories   = $1,
-             protein_g  = $2,
-             fat_g      = $3,
-             carbs_g    = $4,
-             -- 旧カラムも同期（暫定互換）
-             protein    = $2,
-             fat        = $3,
-             carbs      = $4,
-             ai_raw     = $5
-           WHERE id = $6`,
+          `UPDATE meal_logs SET 
+             dish=$1, protein_g=$2, fat_g=$3, carbs_g=$4, calories=$5, 
+             confidence=$6, ai_raw=$7, version=1, 
+             protein=$2, fat=$3, carbs=$4 -- legacy columns
+           WHERE id=$8`,
           [
-            nutrition.calories,
+            dish,
             nutrition.protein_g,
             nutrition.fat_g,
             nutrition.carbs_g,
-            nutrition, // json/jsonb カラムにそのまま突っ込む
+            nutrition.calories,
+            confidence,
+            JSON.stringify({
+              breakdown,
+              snapshot,
+              model: 'gemini-pro',
+              input: { message },
+              at: new Date().toISOString(),
+            }),
             logId,
           ],
         );
+        return res.json({
+          ok: true,
+          logId,
+          nutrition: { dish, ...nutrition, confidence },
+          breakdown,
+        });
       }
     } catch (e) {
       console.error('Nutrition analyze failed:', e);
     }
-
-    return res.json({
-      // 旧仕様互換
-      ok: true,
-      meta: { hasImage: !!file },
-      success: true,
-      logId,
-      nutrition: nutrition
-        ? {
-            calories: nutrition.calories,
-            protein_g: nutrition.protein_g,
-            fat_g: nutrition.fat_g,
-            carbs_g: nutrition.carbs_g,
-          }
-        : null,
-    });
+    return res.json({ ok: true, logId, nutrition: null, breakdown: null });
   } catch (_e) {
     console.error(_e);
     return res.status(500).json({ ok: false, message: 'internal error' });
   }
 });
+
+// New endpoint for slot selection
+app.post(
+  '/log/choose-slot',
+  requireApiAuth,
+  express.json(),
+  async (req, res) => {
+    try {
+      const { logId, key, value } = req.body || {};
+      if (!logId || !key)
+        return res
+          .status(400)
+          .json({ ok: false, message: 'logId and key are required' });
+
+      const { rows } = await pool.query(
+        `SELECT id, ai_raw FROM meal_logs WHERE id=$1 AND user_id=$2`,
+        [logId, req.user.id],
+      );
+      if (!rows?.length)
+        return res.status(404).json({ ok: false, message: 'not found' });
+
+      const ai_raw = rows[0].ai_raw || {};
+      const currentItems = ai_raw?.breakdown?.items || [];
+      const updatedItems = applySlot(currentItems, { key, value });
+
+      const { computeFromItems } = require('./src/services/nutrition/compute');
+      const { buildSlots } = require('./src/services/nutrition/slots');
+      const { P, F, C, kcal, warnings, items } = computeFromItems(updatedItems);
+      const slots = buildSlots(items);
+
+      const dish = ai_raw?.dish || null;
+      const confidence = ai_raw?.confidence ?? 0.7;
+      const newBreakdown = {
+        items,
+        slots: { rice_size: slots.riceSlot, pork_cut: slots.porkSlot },
+        warnings,
+      };
+
+      await pool.query(
+        `UPDATE meal_logs SET 
+         protein_g=$1, fat_g=$2, carbs_g=$3, calories=$4, 
+         ai_raw = jsonb_set(ai_raw, '{breakdown}', $5::jsonb, true), 
+         version = version + 1, 
+         protein=$1, fat=$2, carbs=$3 -- legacy columns
+       WHERE id=$6`,
+        [P, F, C, kcal, JSON.stringify(newBreakdown), logId],
+      );
+
+      return res.json({
+        ok: true,
+        logId,
+        nutrition: {
+          dish,
+          protein_g: P,
+          fat_g: F,
+          carbs_g: C,
+          calories: kcal,
+          confidence,
+        },
+        breakdown: newBreakdown,
+      });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ ok: false, message: 'internal error' });
+    }
+  },
+);
 
 // --- Multer Error Handling ---
 app.use((err, req, res, next) => {
