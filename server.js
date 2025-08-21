@@ -299,7 +299,7 @@ app.use((err, req, res, next) => {
     try {
       if (req.session) req.session.destroy(() => {});
       // 使っているクッキー名が既定なら connect.sid
-      res.clearCookie('connect.sid', { path: '/' });
+      res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
     } catch (_) {
       // ignore errors
     }

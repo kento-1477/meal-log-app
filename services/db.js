@@ -2,11 +2,7 @@ const { Pool } = require('pg');
 const { buildPgConnection } = require('./db-config');
 
 const env = process.env.NODE_ENV || 'development';
-let connectionConfig = buildPgConnection(env);
-
-if (process.env.JEST_WORKER_ID) {
-  connectionConfig.ssl = false;
-}
+const connectionConfig = buildPgConnection(env);
 
 // Log SSL status for easier debugging on startup, but not during tests.
 if (env !== 'test') {
@@ -19,6 +15,9 @@ if (env !== 'test') {
   );
 }
 
-const pool = new Pool(connectionConfig);
+const pool = new Pool({
+  connectionString: connectionConfig.connectionString,
+  ssl: connectionConfig.ssl ?? undefined,
+});
 
 module.exports = { pool };

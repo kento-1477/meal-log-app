@@ -6,6 +6,32 @@ require('dotenv').config();
  * @returns {object} A Knex-compatible connection object.
  */
 function buildPgConnection(env) {
+  if (env === 'test') {
+    let raw =
+      process.env.TEST_DATABASE_URL ||
+      'postgres://postgres:postgres@127.0.0.1:5432/meal_log_test';
+
+    const match = raw.match(/postgres(ql)?:\/\/[^\s]+/i);
+    if (match) {
+      raw = match[0].trim();
+    }
+
+    try {
+      const u = new URL(raw);
+      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+        u.searchParams.delete('ssl');
+        u.searchParams.delete('sslmode');
+        u.searchParams.delete('channel_binding');
+        return { connectionString: u.toString(), ssl: false };
+      }
+      return {
+        connectionString: u.toString(),
+        ssl: { rejectUnauthorized: false },
+      }; // For Neon
+    } catch {
+      return { connectionString: raw, ssl: false };
+    }
+  }
   const isTest = env === 'test';
   const isProd = env === 'production';
 
