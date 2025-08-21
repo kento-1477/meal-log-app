@@ -4,8 +4,8 @@ const {
   analyzeLegacy,
   analyzeBreakdown,
 } = require('./providers/geminiProvider');
-const { computeFromItems } = require('./compute');
-const { buildSlots } = require('./slots');
+const { computeFromItems } = require('./compute.js');
+const { buildSlots } = require('./slots.js');
 
 async function analyze(input) {
   // 1. Try to get breakdown from new provider
@@ -45,5 +45,3 @@ async function analyze(input) {
 
 module.exports = { analyze, analyzeLegacy }; // Also export legacy for other uses if needed
 // NUTRI_BREAKDOWN_END index.js
-
-module.exports = { analyze };
