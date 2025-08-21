@@ -15,8 +15,15 @@ const nutritionService = require('./src/services/nutrition');
 const { computeFromItems } = require('./src/services/nutrition/compute');
 const { buildSlots, applySlot } = require('./src/services/nutrition/slots');
 const multer = require('multer');
-const upload = multer({ storage: multer.memoryStorage() });
-// optional: if you later need strict filtering, add fileFilter here
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
+  fileFilter: (_req, file, cb) => {
+    if (!/^image\//.test(file.mimetype))
+      return cb(new Error('only image/* allowed'));
+    cb(null, true);
+  },
+});
 const { randomUUID } = require('crypto');
 
 const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'connect.sid';
@@ -351,8 +358,17 @@ app.post(
          ai_raw = jsonb_set(ai_raw, '{breakdown}', $5::jsonb, true), 
          version = version + 1, 
          protein=$1, fat=$2, carbs=$3 -- legacy columns
-       WHERE id=$6 AND version=$7`,
-        [P, F, C, kcal, JSON.stringify(newBreakdown), logId, version],
+       WHERE id=$6 AND version=$7 AND user_id=$8`,
+        [
+          P,
+          F,
+          C,
+          kcal,
+          JSON.stringify(newBreakdown),
+          logId,
+          version,
+          req.user.id,
+        ],
       );
 
       if (updateCount === 0) {
