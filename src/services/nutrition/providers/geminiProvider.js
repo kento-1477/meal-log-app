@@ -5,15 +5,7 @@ const { applyPortionCorrection } = require('../portion');
 const { validateAndNormalize } = require('../../../utils/validateNutrition');
 
 // --- v2 (Legacy) ---
-const PROMPT_V2 = `あなたは栄養推定アシスタントです。与えられた食事名（テキスト入力）の内容から、日本の一般的な外食の一人前基準を用いて、PFC（タンパク質・脂質・炭水化物）とカロリーを数値で推定してください。
-【出力仕様】
-- 出力は 1行のみ・有効な最小限のJSON・改行/説明文/余分な記号は禁止。
-- スキーマ：
-  {
-    "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number, "confidence": number,
-    "items": [ {"name": string, "calories": number, "protein_g": number, "fat_g": number, "carbs_g": number} ]
-  }
-- NaN/null/負値は禁止。数値は小数1桁に丸める。`;
+
 const PROMPT_V2 = `あなたは栄養推定アシスタントです。与えられた食事名（テキスト入力）の内容から、日本の一般的な外食の一人前基準を用いて、PFC（タンパク質・脂質・炭水化物）とカロリーを数値で推定してください。
 
 【出力仕様】
