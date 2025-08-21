@@ -16,6 +16,7 @@ const { computeFromItems } = require('./src/services/nutrition/compute');
 const { buildSlots, applySlot } = require('./src/services/nutrition/slots');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
+// optional: if you later need strict filtering, add fileFilter here
 const { randomUUID } = require('crypto');
 
 const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'connect.sid';
@@ -185,11 +186,14 @@ app.use('/api/meals', requireApiAuth, mealRoutes);
 app.use('/api/reminders', requireApiAuth, reminderRoutes);
 
 // --- Chat Log API (breakdown) ---
-app.post('/log', requireApiAuth, upload.none(), async (req, res) => {
+app.post('/log', requireApiAuth, upload.single('image'), async (req, res) => {
   try {
     const message = (req.body?.message || req.body?.text || '').trim();
-    if (!message)
-      return res.status(400).json({ ok: false, message: 'message required' });
+    const file = req.file || null;
+    if (!message && !file)
+      return res
+        .status(400)
+        .json({ ok: false, message: 'message or image required' });
 
     // 1) AIで内訳（失敗時は空→デフォルトitems）
     const ai =
