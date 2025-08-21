@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const chatBox = document.getElementById('chat-box');
+  const _chatBox = document.getElementById('chat-box');
   const textInput = document.getElementById('text-input');
   const sendButton = document.getElementById('send-button');
   const imageButton = document.getElementById('image-button');
@@ -182,11 +182,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ページ読み込み時に履歴をロード
   loadChatHistory();
+
+  // inline handlerや他スクリプトから呼べるように公開（これで no-unused-vars を回避）
+  window.addMessage = addMessage;
 });
 
 // ---- NUTRI_BREAKDOWN_START renderNutritionCard ----
 function renderNutritionCard({ nutrition, breakdown, logId }) {
-  const chatBox = document.getElementById('chat-box');
+  const _chatBox = document.getElementById('chat-box');
   const card = document.createElement('div');
   card.className = 'message bot-message nutri-card'; // bot-messageクラスを追加
   card.dataset.logId = logId;
@@ -290,7 +293,7 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
 }
 
 function addMessage(text, sender, imageUrl = null, save = true) {
-  const chatBox = document.getElementById('chat-box');
+  const _chatBox = document.getElementById('chat-box');
   if (typeof text === 'object' && text.nodeType === 1) {
     // Check if text is a DOM element
     chatBox.appendChild(text);

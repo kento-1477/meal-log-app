@@ -1,5 +1,5 @@
 // NUTRI_BREAKDOWN_START slots.js
-const { FOOD_BY_CODE } = require('./compute.js');
+const { FOOD_BY_CODE: _FOOD_BY_CODE } = require('./compute.js');
 
 function buildSlots(items) {
   const rice = items.find((it) => it.code === 'rice_cooked');

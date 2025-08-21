@@ -1,4 +1,4 @@
-const { buildSlots, applySlot } = require('../src/services/nutrition/slots');
+const { applySlot } = require('../src/services/nutrition/slots');
 const { computeFromItems } = require('../src/services/nutrition/compute');
 
 test('applySlot for rice_size changes quantity', () => {

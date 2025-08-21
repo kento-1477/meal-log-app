@@ -1,5 +1,5 @@
 require('dotenv').config();
-const fs = require('node:fs/promises');
+// const fs = require('node:fs/promises'); // unused
 const path = require('node:path');
 const express = require('express');
 const bcrypt = require('bcrypt');
