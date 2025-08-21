@@ -1,0 +1,38 @@
+[
+  {
+    "code": "pork_loin_cutlet",
+    "name": "ロースとんかつ",
+    "per100g": { "p": 18, "f": 20, "c": 12, "kcal": 300 },
+    "tags": ["deep_fry", "pork", "cutlet"]
+  },
+  {
+    "code": "pork_fillet_cutlet",
+    "name": "ヒレかつ",
+    "per100g": { "p": 22, "f": 14, "c": 10, "kcal": 270 },
+    "tags": ["deep_fry", "pork", "cutlet"]
+  },
+  {
+    "code": "rice_cooked",
+    "name": "ご飯",
+    "per100g": { "p": 2.5, "f": 0.3, "c": 37, "kcal": 168 },
+    "tags": ["staple", "rice"]
+  },
+  {
+    "code": "cabbage_raw",
+    "name": "キャベツ",
+    "per100g": { "p": 1.3, "f": 0.1, "c": 6, "kcal": 25 },
+    "tags": ["veg"]
+  },
+  {
+    "code": "miso_soup",
+    "name": "味噌汁",
+    "per100g": { "p": 1.5, "f": 0.7, "c": 2.8, "kcal": 18 },
+    "tags": ["soup"]
+  },
+  {
+    "code": "tonkatsu_sauce",
+    "name": "とんかつソース",
+    "per100g": { "p": 1, "f": 0.2, "c": 40, "kcal": 170 },
+    "tags": ["sauce"]
+  }
+]
