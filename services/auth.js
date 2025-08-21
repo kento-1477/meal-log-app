@@ -27,10 +27,17 @@ function initialize(passport, pool) {
   passport.serializeUser((user, done) => done(null, user.id));
   passport.deserializeUser(async (id, done) => {
     try {
-      const result = await pool.query('SELECT * FROM users WHERE id = $1', [
-        id,
-      ]);
-      return done(null, result.rows[0]);
+      const { rows } = await pool.query(
+        'SELECT id, email, username FROM users WHERE id = $1',
+        [id],
+      );
+      const user = rows[0];
+      if (!user) {
+        console.warn('[auth] deserializeUser: user not found for id=', id);
+        // 古い/破損セッション。未ログインとして扱う
+        return done(null, false);
+      }
+      return done(null, user);
     } catch (_e) {
       return done(_e);
     }

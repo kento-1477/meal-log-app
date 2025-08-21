@@ -15,6 +15,9 @@ if (env !== 'test') {
   );
 }
 
-const pool = new Pool(connectionConfig);
+const pool = new Pool({
+  connectionString: connectionConfig.connectionString,
+  ssl: connectionConfig.ssl ?? undefined,
+});
 
 module.exports = { pool };
