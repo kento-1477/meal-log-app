@@ -126,7 +126,14 @@ app.get('/api/session', (req, res) => {
 });
 
 // --- Health Check ---
-app.get('/healthz', (req, res) => res.status(200).send('ok'));
+app.get('/healthz', async (_req, res) => {
+  try {
+    await pool.query('select 1');
+    res.status(200).send('ok');
+  } catch {
+    res.status(500).send('db_ng');
+  }
+});
 
 // --- Passport Configuration ---
 require('./services/auth').initialize(passport, pool);

@@ -49,19 +49,63 @@ meal-log-app/
 $ git clone https://github.com/<user>/meal-log-app.git
 $ cd meal-log-app && npm ci
 
-# 2. create .env
-DATABASE_URL=postgres://localhost:5432/meal_log_db
-SESSION_SECRET=dev-secret
+# 2. create .env.development
+#    (for local development, points to your local PostgreSQL)
+#    .env.development
+#    NODE_ENV=development
+#    DATABASE_URL=postgresql://user:password@localhost:5432/your_db_name?sslmode=disable
+#    SESSION_SECRET=dev-secret
 
 # 3. run DB & migrations (Knex)
+#    Start your local Docker PostgreSQL (if using docker-compose.yml)
 $ docker compose up -d db
-$ npm run migrate:latest
+#    Run migrations for development environment
+$ npm run migrate:dev
 
 # 4. start dev server
 $ npm run dev    # nodemon
 ```
 
 Visit [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Database Configuration & Deployment
+
+This project uses environment variables to manage database connections across different environments (development, test, production).
+
+- **`.env.development`**: For local development. Points to your local PostgreSQL instance.
+- **`.env.test`**: For local and CI testing. Points to a dedicated test PostgreSQL instance (e.g., via Docker Compose).
+- **`.env.production`**: For production deployment. Contains sensitive production database URLs.
+
+**Key Environment Variables:**
+
+- `DATABASE_URL`: The primary connection string for the application (e.g., Neon's Pooled connection).
+- `DATABASE_URL_DIRECT`: A direct connection string for database maintenance tasks like migrations (e.g., Neon's Direct connection).
+- `DB_SSL`: Set to `true` to enable SSL for the database connection. Our implementation requires `DB_SSL=true` for production.
+- `DB_SSL_VERIFY`: Set to `true` to enable strict SSL certificate verification. Default is `false` (rejectUnauthorized).
+
+**Running Migrations & Seeds:**
+
+Use the following `npm` scripts, which automatically load the correct `.env` file and handle `DATABASE_URL` injection:
+
+- `npm run migrate:dev`: Run migrations for development.
+- `npm run seed:dev`: Run seeds for development.
+- `npm run migrate:test`: Run migrations for testing.
+- `npm run migrate:prod`: Run migrations for production (uses `DATABASE_URL_DIRECT`).
+- `npm run seed:prod`: Run seeds for production (guarded against accidental execution).
+- `npm run psql:prod -- -c '...'`: Run `psql` commands against the production database (uses `DATABASE_URL_DIRECT`).
+
+**Deployment Health Check (`/healthz`):**
+
+After deployment, you can check the application's health and database connectivity by accessing the `/healthz` endpoint:
+
+```bash
+curl http://your-app-url/healthz
+```
+
+- Returns `200 OK` if the application is running and can connect to the database.
+- Returns `500 db_ng` if the application is running but cannot connect to the database. - **Troubleshooting `500 db_ng`:** - **Environment Variable Mismatch:** Check if `DATABASE_URL` (or `DATABASE_URL_DIRECT` for `psql` commands) is correctly set and points to the intended database. - **SSL Configuration:** Verify `DB_SSL` and `DB_SSL_VERIFY` settings match the database's requirements. - **Database Reachability:** Ensure the database host is reachable from the application's environment (e.g., network firewalls). - **Database Credentials/Permissions:** Confirm the user/password has correct access rights.
 
 ---
 

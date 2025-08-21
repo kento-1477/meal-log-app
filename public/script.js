@@ -100,17 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch('/log', {
         method: 'POST',
         body: formData,
-        credentials: 'same-origin',
+        credentials: 'include',
       });
-      const textResult = await response.text();
+      let result = await response.json();
       if (!response.ok)
-        throw new Error(`HTTP ${response.status} ${textResult.slice(0, 120)}`);
-      let result;
-      try {
-        result = JSON.parse(textResult);
-      } catch {
-        throw new Error('JSONではありません');
-      }
+        throw new Error(
+          `HTTP ${response.status} ${JSON.stringify(result).slice(0, 120)}`,
+        );
 
       // 改行を<br>に変換して表示
       const formattedReply = (result.reply || '').replace(/\n/g, '<br>');

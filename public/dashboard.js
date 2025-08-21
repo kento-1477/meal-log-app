@@ -66,18 +66,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         row.innerHTML = `
                     <td>${dateTimeString}</td>
-                    <td>${meal.mealName || ''}</td>
-                    <td>${meal.protein || ''}</td>
-                    <td>${meal.fat || ''}</td>
-                    <td>${meal.carbs || ''}</td>
-                    <td>${meal.calories || ''}</td>
+                    <td>${meal.mealName ?? meal.food_item ?? meal.memo ?? ''}</td>
+                    <td>${meal.protein_g ?? meal.protein ?? ''}</td>
+                    <td>${meal.fat_g ?? meal.fat ?? ''}</td>
+                    <td>${meal.carbs_g ?? meal.carbs ?? ''}</td>
+                    <td>${meal.calories ?? meal.calories_kcal ?? ''}</td>
                 `;
         mealDataBody.appendChild(row);
 
-        totalCalories += parseFloat(meal.calories) || 0;
-        totalProtein += parseFloat(meal.protein) || 0;
-        totalFat += parseFloat(meal.fat) || 0;
-        totalCarbs += parseFloat(meal.carbs) || 0;
+        totalCalories += parseFloat(meal.calories ?? meal.calories_kcal) || 0;
+        totalProtein += parseFloat(meal.protein_g ?? meal.protein) || 0;
+        totalFat += parseFloat(meal.fat_g ?? meal.fat) || 0;
+        totalCarbs += parseFloat(meal.carbs_g ?? meal.carbs) || 0;
       });
 
       // 目標値を取得
