@@ -18,6 +18,21 @@ Next‑gen food tracking app that lets users log meals by simply chatting or sen
 
 ---
 
+## API Design & Data Contracts
+
+### Data Source of Truth
+
+When handling nutrition data, it's important to understand the source of truth:
+
+- **Database Columns (`calories`, `protein_g`, etc.):** These columns in the `meal_logs` table are considered the **source of truth** for core nutritional values. They are used for official reporting, dashboard calculations, and any other critical feature.
+- **`ai_raw` JSON Column:** This column stores the complete, raw JSON response from the AI nutrition analysis, including the calculated breakdown of items. Its primary purposes are:
+  1.  **History & Debugging:** To keep a record of what the AI returned for a given request.
+  2.  **Recalculation:** To provide the necessary data for the `/log/choose-slot` endpoint, which allows users to adjust meal components and recalculate nutrition without calling the AI again.
+
+In summary: The individual columns are the authority for core data, while `ai_raw` is a historical record and a payload for secondary operations.
+
+---
+
 ## ️ Directory Structure (after refactor)
 
 ```
@@ -181,6 +196,10 @@ Nutritionix（任意 / 未設定時はダミー解析）
 NUTRIX_ID=your_app_id
 
 NUTRIX_KEY=your_app_key
+```
+
+```
+
 ```
 
 ```
