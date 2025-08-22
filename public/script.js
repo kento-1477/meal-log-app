@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // メッセージをチャットボックスに表示する関数
+  /* exported addMessage */
   function addMessage(text, sender, imageUrl = null, save = true) {
     const messageElement = document.createElement('div');
     messageElement.classList.add('message', `${sender}-message`);
@@ -291,37 +292,6 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
   }
 
   return card;
-}
-
-function addMessage(text, sender, imageUrl = null, save = true) {
-  const _chatBox = document.getElementById('chat-box');
-  if (typeof text === 'object' && text.nodeType === 1) {
-    // Check if text is a DOM element
-    _chatBox.appendChild(text);
-  } else {
-    const messageElement = document.createElement('div');
-    messageElement.classList.add('message', `${sender}-message`);
-
-    if (text) {
-      const textNode = document.createElement('p');
-      textNode.innerHTML = text; // innerHTML to reflect <br>
-      messageElement.appendChild(textNode);
-    }
-
-    if (imageUrl) {
-      const imageNode = document.createElement('img');
-      imageNode.src = imageUrl;
-      messageElement.appendChild(imageNode);
-    }
-    _chatBox.appendChild(messageElement);
-  }
-
-  _chatBox.scrollTop = _chatBox.scrollHeight; // Auto-scroll
-
-  if (save && typeof text === 'string') {
-    // Only save string messages
-    saveChatHistory({ text, sender, imageUrl });
-  }
 }
 
 // ---- NUTRI_BREAKDOWN_END renderNutritionCard ----

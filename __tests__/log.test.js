@@ -1,14 +1,16 @@
 const { createTestUser } = require('../tests/utils/createTestUser.js');
+const { randomUUID: uuidv4 } = require('crypto');
 
 // 1. モックを最上部に配置
+// The requireApiAuth mock needs to be updated to set the user from the request body
 jest.mock('../services/auth', () => ({
   initialize: jest.fn(),
   requireApiAuth: (req, res, next) => {
-    // このテストではヘルパーでユーザーを作成するため、モックはシンプルにする
+    req.user = { id: req.body.user_id };
     next();
   },
   requirePageAuth: (req, res, next) => {
-    req.user = { id: 1, username: 'testuser' }; // ページ認証は別途必要なら残す
+    req.user = { id: 1, username: 'testuser' };
     next();
   },
 }));
@@ -45,20 +47,35 @@ describe('/log Endpoint Integration Tests', () => {
       .send({ message: mealText, user_id: userId }); // 取得したUUIDを送信
 
     expect(response.statusCode).toBe(200);
-    expect(response.body.ok).toBe(true);
+    expect(response.body.success).toBe(true); // Check for success, not ok
 
     const finalCountResult = await pool.query('SELECT COUNT(*) FROM meal_logs');
     const finalCount = parseInt(finalCountResult.rows[0].count, 10);
     expect(finalCount).toBe(initialCount + 1);
 
     const savedLogResult = await pool.query(
-      'SELECT * FROM meal_logs ORDER BY consumed_at DESC LIMIT 1', // idではなくconsumed_atでソート
+      'SELECT * FROM meal_logs ORDER BY consumed_at DESC LIMIT 1',
     );
     const savedLog = savedLogResult.rows[0];
     expect(savedLog.food_item).toBe(mealText);
-    expect(savedLog.user_id).toBe(userId); // 保存されたuser_idがUUIDと一致するか確認
+    expect(savedLog.user_id).toBe(userId);
+  });
+
+  test('should return 500 if logging with a non-existent user_id', async () => {
+    const nonExistentUserId = uuidv4();
+    const mealText = '不正なユーザーからの投稿';
+
+    const response = await request(app)
+      .post('/log')
+      .send({ message: mealText, user_id: nonExistentUserId });
+
+    // The centralized error handler should catch the foreign key violation and return 500
+    expect(response.statusCode).toBe(500);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error).toContain('violates foreign key constraint');
   });
 });
+
 afterAll(async () => {
   const { pool } = require('../services/db.js');
   if (pool && !pool.ended) {
