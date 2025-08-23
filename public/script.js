@@ -1,5 +1,5 @@
+/* exported addMessage */
 document.addEventListener('DOMContentLoaded', () => {
-  const _chatBox = document.getElementById('chat-box');
   const textInput = document.getElementById('text-input');
   const sendButton = document.getElementById('send-button');
   const imageButton = document.getElementById('image-button');
@@ -29,28 +29,52 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // メッセージをチャットボックスに表示する関数
-  /* exported addMessage */
-  function addMessage(text, sender, imageUrl = null, save = true) {
+  function addMessage(content, sender, imageUrl = null, save = true) {
+    const chatBox = document.getElementById('chat-box');
+
+    // メッセージの外枠（吹き出し）
     const messageElement = document.createElement('div');
     messageElement.classList.add('message', `${sender}-message`);
 
-    if (text) {
-      const textNode = document.createElement('p');
-      textNode.innerHTML = text; // innerHTMLに変更して改行<br>を反映
-      messageElement.appendChild(textNode);
+    // 1) DOM要素ならそのまま入れる（Element/Node 両対応）
+    if (
+      content &&
+      (content instanceof Element ||
+        (typeof Node !== 'undefined' && content instanceof Node) ||
+        content.nodeType === 1)
+    ) {
+      messageElement.appendChild(content);
+    }
+    // 2) 文字列ならテキストとして入れる（XSS対策済み）
+    else if (typeof content === 'string') {
+      const p = document.createElement('p');
+      const parts = content.split('\n');
+      parts.forEach((part, i) => {
+        if (i) p.appendChild(document.createElement('br'));
+        p.appendChild(document.createTextNode(part));
+      });
+      messageElement.appendChild(p);
+    }
+    // 3) その他は安全に文字列化
+    else if (content != null) {
+      const p = document.createElement('p');
+      p.textContent = String(content);
+      messageElement.appendChild(p);
     }
 
+    // 画像があれば添付
     if (imageUrl) {
-      const imageNode = document.createElement('img');
-      imageNode.src = imageUrl;
-      messageElement.appendChild(imageNode);
+      const img = document.createElement('img');
+      img.src = imageUrl;
+      messageElement.appendChild(img);
     }
 
-    _chatBox.appendChild(messageElement);
-    _chatBox.scrollTop = _chatBox.scrollHeight; // 自動スクロール
+    chatBox.appendChild(messageElement);
+    chatBox.scrollTop = chatBox.scrollHeight;
 
-    if (save) {
-      saveChatHistory({ text, sender, imageUrl });
+    // DOM要素は履歴に保存しない（XSS/循環参照を避ける）
+    if (save && typeof content === 'string') {
+      saveChatHistory({ text: content, sender, imageUrl });
     }
   }
 
@@ -191,14 +215,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ---- NUTRI_BREAKDOWN_START renderNutritionCard ----
 function renderNutritionCard({ nutrition, breakdown, logId }) {
-  const _chatBox = document.getElementById('chat-box');
   const card = document.createElement('div');
   card.className = 'message bot-message nutri-card'; // bot-messageクラスを追加
   card.dataset.logId = logId;
 
   const h = document.createElement('div');
   h.className = 'nutri-header';
-  h.textContent = `🍱 ${nutrition?.dish || '食事'} ｜ 信頼度 ${Math.round((nutrition?.confidence ?? 0) * 100)}%`;
+  h.textContent = `🍱 ${nutrition?.dish || '食事'} ｜ 信頼度 ${Math.round(
+    (nutrition?.confidence ?? 0) * 100,
+  )}%`;
 
   const core = document.createElement('div');
   core.className = 'nutri-core';
