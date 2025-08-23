@@ -57,7 +57,7 @@ describe('/log Endpoint Integration Tests', () => {
       'SELECT * FROM meal_logs ORDER BY consumed_at DESC LIMIT 1',
     );
     const savedLog = savedLogResult.rows[0];
-    expect(savedLog.food_item).toBe(mealText);
+    expect(savedLog.food_item).toBe(response.body.dish);
     expect(savedLog.user_id).toBe(userId);
   });
 

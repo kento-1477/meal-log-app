@@ -1,5 +1,5 @@
-const { applySlot } = require('../src/services/nutrition/slots');
-const { computeFromItems } = require('../src/services/nutrition/compute');
+const { applySlot } = require('../services/nutrition/slots');
+const { computeFromItems } = require('../services/nutrition/compute');
 
 test('applySlot for rice_size changes quantity', () => {
   const items = [{ code: 'rice_cooked', qty_g: 150 }];
