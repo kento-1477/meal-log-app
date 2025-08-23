@@ -19,6 +19,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // チャット履歴をローカルストレージに保存する関数
   function saveChatHistory(entry) {
     try {
+      // 画像が blob: のときは保存しない（復元不能だから）
+      if (entry.imageUrl && String(entry.imageUrl).startsWith('blob:')) {
+        entry = { ...entry, imageUrl: undefined };
+      }
       const prev = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || '[]');
       // 期待スキーマ：{ text, sender, imageUrl, ts }
       prev.push({ ...entry, ts: Date.now() });
@@ -36,17 +40,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const messageElement = document.createElement('div');
     messageElement.classList.add('message', `${sender}-message`);
 
-    // 1) DOM要素ならそのまま入れる（Element/Node 両対応）
-    if (
-      content &&
-      (content instanceof Element ||
-        (typeof Node !== 'undefined' && content instanceof Node) ||
-        content.nodeType === 1)
-    ) {
-      messageElement.appendChild(content);
-    }
-    // 2) 文字列ならテキストとして入れる（XSS対策済み）
-    else if (typeof content === 'string') {
+    const isDOM = (v) =>
+      v && typeof v === 'object' && (v.nodeType === 1 || v.nodeType === 11);
+
+    if (isDOM(content)) {
+      messageElement.appendChild(content); // Element or DocumentFragment
+    } else if (typeof content === 'string') {
       const p = document.createElement('p');
       const parts = content.split('\n');
       parts.forEach((part, i) => {
@@ -54,9 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         p.appendChild(document.createTextNode(part));
       });
       messageElement.appendChild(p);
-    }
-    // 3) その他は安全に文字列化
-    else if (content != null) {
+    } else if (content != null) {
       const p = document.createElement('p');
       p.textContent = String(content);
       messageElement.appendChild(p);
@@ -80,8 +77,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // チャット履歴をローカルストレージから読み込む関数
   function loadChatHistory() {
-    const history = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY));
-    if (history) {
+    const history = JSON.parse(
+      localStorage.getItem(CHAT_HISTORY_KEY) || '[]',
+    ).filter((e) => !e.imageUrl || !String(e.imageUrl).startsWith('blob:'));
+
+    if (history.length) {
       history.forEach((message) => {
         addMessage(message.text, message.sender, message.imageUrl, false); // 読み込み時は保存しない
       });
