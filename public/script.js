@@ -281,6 +281,28 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
             credentials: 'include',
             body: JSON.stringify({ logId, key: slot.key, value: opt }),
           });
+
+          // Handle 409 Conflict
+          if (resp.status === 409) {
+            alert('他の端末で更新されました。最新の状態を取得します。');
+            const refetchResp = await fetch(`/api/log/${logId}`);
+            const refetchData = await refetchResp.json();
+            if (refetchData?.ok && refetchData.item?.ai_raw) {
+              const newCard = renderNutritionCard({
+                nutrition: {
+                  ...refetchData.item,
+                  ...refetchData.item.ai_raw.nutrition,
+                },
+                breakdown: refetchData.item.ai_raw.breakdown,
+                logId: refetchData.item.id,
+              });
+              currentCard.replaceWith(newCard);
+            } else {
+              currentCard.querySelector('.nutri-core').textContent = oldCore; // Rollback on refetch failure
+            }
+            return;
+          }
+
           const data = await resp.json();
           if (data?.ok) {
             const newCard = renderNutritionCard({
@@ -291,10 +313,12 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
             currentCard.replaceWith(newCard);
           } else {
             currentCard.querySelector('.nutri-core').textContent = oldCore; // Rollback
+            alert(`更新に失敗しました: ${data?.message || '不明なエラー'}`);
           }
         } catch (e) {
           console.error(e);
           currentCard.querySelector('.nutri-core').textContent = oldCore; // Rollback
+          alert('通信エラーが発生しました。');
         }
       });
       row.appendChild(b);
