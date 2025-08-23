@@ -12,12 +12,12 @@ async function realAnalyze(input) {
     try {
       console.log('Attempting analysis with Gemini...');
       return await geminiProvider.analyze(input); // GEMINI_MOCK=1 ならモックが返る
-    } catch (error) {
+    } catch (_error) {
       console.error(
         'Gemini analysis failed, falling back to deterministic.',
-        error,
+        _error,
       );
-      throw error;
+      throw _error;
     }
   }
   console.log('AI analysis is not enabled or provider is not Gemini.');
@@ -28,8 +28,10 @@ async function analyze(input) {
   let aiResult;
   try {
     aiResult = await realAnalyze(input);
-  } catch (e) {
+  } catch (_error) {
     console.log('realAnalyze failed, using deterministic fallback.');
+    // 必要ならデバッグ出力してもOK:
+    // console.debug(_error);
     aiResult = {
       dish: input.text || '食事',
       confidence: 0.5,

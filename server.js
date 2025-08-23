@@ -228,18 +228,7 @@ function requirePageAuth(req, res, next) {
   res.redirect('/login.html');
 }
 
-// NUTRI_BREAKDOWN: test用 in-memory ストア
-const inmemLogs = new Map();
 const slotState = new Map(); // logId -> base items[]
-function toApiPayload(log) {
-  const { id, dish, confidence, nutrition, breakdown } = log;
-  return {
-    ok: true,
-    logId: id,
-    nutrition: { ...nutrition, dish, confidence },
-    breakdown,
-  };
-}
 
 // --- API Routes ---
 app.use('/api/meals', requireApiAuth, mealRoutes);
@@ -401,12 +390,10 @@ app.post(
       if (process.env.NODE_ENV === 'test') {
         const baseItems = slotState.get(logId);
         if (!Array.isArray(baseItems)) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              error: 'unknown logId or items not found in slotState',
-            });
+          return res.status(400).json({
+            success: false,
+            error: 'unknown logId or items not found in slotState',
+          });
         }
         const updated = applySlot(baseItems, { key, value });
         const {
@@ -420,20 +407,12 @@ app.post(
 
         const dish = baseItems.dish || null;
         const confidence = baseItems.confidence ?? 0.7;
+        const s = buildSlots(normItems);
         const newBreakdown = {
           items: normItems,
           slots: {
-            rice_size: buildSlots(normItems).riceSlot,
-            pork_cut: buildSlots(normItems).porkSlot,
-          },
-          warnings,
-        };
-
-        const newBreakdown = {
-          items: normItems,
-          slots: {
-            rice_size: buildSlots(normItems).riceSlot,
-            pork_cut: buildSlots(normItems).porkSlot,
+            rice_size: s.riceSlot,
+            pork_cut: s.porkSlot,
           },
           warnings,
         };

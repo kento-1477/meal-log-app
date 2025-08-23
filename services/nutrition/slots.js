@@ -1,4 +1,4 @@
-function buildSlots(items) {
+function buildSlots(_items) {
   // Example: Returns slot definitions
   const riceSlot = {
     question: 'ご飯の量',

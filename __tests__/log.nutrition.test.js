@@ -4,7 +4,7 @@ const { pool } = require('../services/db.js');
 const { createTestUser } = require('../tests/utils/createTestUser.js');
 
 // Mock the correct provider now used by the /log route
-jest.mock('../src/services/nutrition/providers/geminiProvider.js', () => ({
+jest.mock('../services/nutrition/providers/geminiProvider', () => ({
   analyzeText: jest.fn(async () => ({
     calories: 450,
     protein_g: 30,
@@ -18,7 +18,7 @@ jest.mock('../src/services/nutrition/providers/geminiProvider.js', () => ({
 // Import the mocked function to check calls
 const {
   analyzeText,
-} = require('../src/services/nutrition/providers/geminiProvider.js');
+} = require('../services/nutrition/providers/geminiProvider');
 
 describe('/log with nutrition', () => {
   let userId;
