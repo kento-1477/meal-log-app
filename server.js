@@ -39,6 +39,10 @@ console.log('Health check endpoint ready at /healthz');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Health check for Render's default path, placed after static middleware
+// to ensure the frontend index.html is served first.
+app.get('/', (_req, res) => res.status(200).send('ok'));
 const isProd = process.env.NODE_ENV === 'production';
 app.set('trust proxy', 1);
 app.use(
