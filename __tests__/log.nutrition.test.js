@@ -5,20 +5,19 @@ const { createTestUser } = require('../tests/utils/createTestUser.js');
 
 // Mock the correct provider now used by the /log route
 jest.mock('../services/nutrition/providers/geminiProvider', () => ({
-  analyzeText: jest.fn(async () => ({
-    calories: 450,
-    protein_g: 30,
-    fat_g: 12,
-    carbs_g: 50,
-    confidence: 0.9,
-    items: [],
+  analyze: jest.fn(async () => ({
+    dish: 'モックされた料理',
+    confidence: 0.8,
+    items: [
+      { code: 'rice_cooked', qty_g: 250, include: true },
+      { code: 'chicken_breast_cooked', qty_g: 150, include: true },
+    ],
   })),
+  analyzeText: jest.fn(), // Keep for other tests if they use it
 }));
 
 // Import the mocked function to check calls
-const {
-  analyzeText,
-} = require('../services/nutrition/providers/geminiProvider');
+const { analyze } = require('../services/nutrition/providers/geminiProvider');
 
 describe('/log with nutrition', () => {
   let userId;
@@ -29,7 +28,7 @@ describe('/log with nutrition', () => {
     );
     userId = await createTestUser();
     // Clear mock calls before each test
-    analyzeText.mockClear();
+    analyze.mockClear();
   });
 
   afterAll(async () => {
@@ -50,8 +49,12 @@ describe('/log with nutrition', () => {
     expect(res.body.nutrition.calories).toBeDefined();
     expect(res.body.nutrition.protein_g).toBeDefined();
 
-    // Check that our mock was called correctly (with a placeholder for image-only logs)
-    expect(analyzeText).toHaveBeenCalledWith({ text: '画像記録' });
+    // Check that our mock was called correctly
+    expect(analyze).toHaveBeenCalledWith({
+      text: '',
+      imageBuffer: expect.any(Buffer),
+      mime: 'image/jpeg',
+    });
 
     const { rows } = await pool.query(
       'SELECT calories, protein_g, fat_g, carbs_g FROM meal_logs WHERE id = $1',
