@@ -1,6 +1,5 @@
 require('dotenv').config();
 const { randomUUID } = require('crypto');
-// const fs = require('node:fs/promises'); // unused
 const path = require('node:path');
 const express = require('express');
 const bcrypt = require('bcryptjs');
@@ -8,21 +7,20 @@ const passport = require('passport');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
-// 既存ルートは残す
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
-// NUTRI_BREAKDOWN 追加 import
 const { analyze } = require('./services/nutrition');
 const { computeFromItems } = require('./services/nutrition/compute');
 const { applySlot, buildSlots } = require('./services/nutrition/slots');
 const imageStorage = require('./services/storage/imageStorage');
 const geminiProvider = require('./services/nutrition/providers/geminiProvider');
 const multer = require('multer');
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (_req, file, cb) => {
-    if (file && !/^image\//.test(file.mimetype)) return cb(null, false); // ファイル無視
+    if (file && !/^image\//.test(file.mimetype)) return cb(null, false);
     cb(null, true);
   },
 });
@@ -36,13 +34,13 @@ app.use(
   }),
 );
 
-// 1) 認証/セッションより前にヘルスチェックを定義（Renderのヘルスチェック用）
+// 1) Health check endpoint (before any session/auth middleware)
 app.get('/healthz', (_req, res) => {
   res.status(200).send('ok');
 });
 console.log('Health check endpoint ready at /healthz');
 
-// --- Middleware ---
+// --- Core Middleware ---
 const morgan = require('morgan');
 morgan.token('user', (req) => (req.user && req.user.id ? req.user.id : 'anon'));
 app.use(
@@ -53,18 +51,10 @@ app.use(
     },
   ),
 );
-app.use((req, _res, next) => {
-  req.user = req.user || {};
-  next();
-});
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
-// Health check for Render's default path, placed after static middleware
-// to ensure the frontend index.html is served first.
-app.get('/', (_req, res) => res.status(200).send('ok'));
+// --- Session & Passport Middleware ---
 const isProd = process.env.NODE_ENV === 'production';
 app.set('trust proxy', 1);
 app.use(
@@ -79,17 +69,99 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: isProd, // 本番のみ true
-      sameSite: isProd ? 'lax' : 'lax',
+      secure: isProd,
+      sameSite: 'lax',
       maxAge: 1000 * 60 * 60 * 24 * 7,
     },
   }),
 );
-
 app.use(passport.initialize());
 app.use(passport.session());
+require('./services/auth').initialize(passport, pool);
 
-// --- User Registration API ---
+// --- Authentication Middleware ---
+async function requireApiAuth(req, res, next) {
+  if (process.env.NODE_ENV === 'test') {
+    req.user = {
+      id: req.body.user_id || '00000000-0000-0000-0000-000000000000',
+      email: 'test@example.com',
+    };
+    return next();
+  }
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  const guestId = req.session.guest_id;
+  if (guestId) {
+    req.user = { id: guestId, is_guest: true };
+    return next();
+  }
+  try {
+    const newGuestId = randomUUID();
+    const guestEmail = `guest_${newGuestId}@example.com`;
+    const hashed = await bcrypt.hash(randomUUID(), 10);
+    await pool.query(
+      'INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)',
+      [newGuestId, `guest_${newGuestId}`.slice(0, 50), guestEmail, hashed],
+    );
+    req.session.guest_id = newGuestId;
+    req.user = { id: newGuestId, is_guest: true };
+    return next();
+  } catch (error) {
+    console.error('Failed to create guest user:', error);
+    return res.status(500).json({ message: 'Could not initialize session.' });
+  }
+}
+
+function requirePageAuth(req, res, next) {
+  if (process.env.NODE_ENV === 'test') {
+    req.user = { id: 1, email: 'test@example.com' };
+    return next();
+  }
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.redirect('/login.html');
+}
+
+// ---- Protected HTML Routes (must be before static assets) ----
+app.get(['/', '/index.html'], requirePageAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.get(['/dashboard', '/dashboard.html'], requirePageAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+// Catch-all for other .html files to protect them, excluding login.
+app.get(/^\/(?!login(?:\.html)?$).+\.html$/, requirePageAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', req.path));
+});
+
+// ---- Publicly Accessible Login Page ----
+app.get(['/login', '/login.html'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// ---- Static Asset Serving (CSS, JS, images) ----
+// This is last for routing, with directory indexing disabled.
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    index: false,
+    redirect: false,
+    extensions: false,
+  }),
+);
+
+// --- API Routes ---
+const slotState = new Map(); // logId -> base items[]
+
+app.get('/me', (req, res) => {
+  const user = req.user
+    ? { id: req.user.id, email: req.user.email, username: req.user.username }
+    : null;
+  res.json({ authenticated: !!req.user, user });
+});
+
 app.post('/api/register', async (req, res) => {
   try {
     let { username, email, password } = req.body || {};
@@ -98,7 +170,6 @@ app.post('/api/register', async (req, res) => {
         .status(400)
         .json({ message: 'Email and password are required.' });
 
-    // username 未指定なら email から生成（ユニーク化）
     if (!username || !username.trim()) {
       const base = (email.split('@')[0] || 'user').toLowerCase();
       let candidate = base,
@@ -133,7 +204,6 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// --- Login API ---
 app.post('/api/login', (req, res, next) => {
   passport.authenticate('local', (err, user, info) => {
     if (err) return next(err);
@@ -152,7 +222,6 @@ app.post('/api/login', (req, res, next) => {
   })(req, res, next);
 });
 
-// --- Logout API ---
 app.post('/api/logout', (req, res) => {
   req.logout((err) => {
     if (err) return res.status(500).json({ message: 'Error logging out' });
@@ -160,7 +229,6 @@ app.post('/api/logout', (req, res) => {
   });
 });
 
-// --- Current Login Status API ---
 app.get('/api/session', (req, res) => {
   if (!req.user) return res.status(401).json({ authenticated: false });
   res.json({
@@ -173,68 +241,20 @@ app.get('/api/session', (req, res) => {
   });
 });
 
-// --- Passport Configuration ---
-require('./services/auth').initialize(passport, pool);
+// Stubbed API endpoints for dashboard
+app.get('/api/meal-data', requireApiAuth, async (req, res) => {
+  // TODO: Implement actual data fetching
+  res.json({ items: [], summary: { kcal: 0, P: 0, F: 0, C: 0 } });
+});
 
-// --- Authentication Middleware ---
-async function requireApiAuth(req, res, next) {
-  if (process.env.NODE_ENV === 'test') {
-    req.user = {
-      id: req.body.user_id || '00000000-0000-0000-0000-000000000000',
-      email: 'test@example.com',
-    };
-    return next();
-  }
+app.get('/api/ai-advice', requireApiAuth, async (req, res) => {
+  // TODO: Implement actual AI advice generation
+  res.json({ advice: [] });
+});
 
-  if (req.isAuthenticated()) {
-    return next();
-  }
-
-  // Guest user fallback
-  const guestId = req.session.guest_id;
-  if (guestId) {
-    req.user = { id: guestId, is_guest: true };
-    return next();
-  }
-
-  // Create a new guest user
-  try {
-    const newGuestId = randomUUID();
-    const guestEmail = `guest_${newGuestId}@example.com`;
-    const hashed = await bcrypt.hash(randomUUID(), 10); // Random password
-
-    await pool.query(
-      'INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)',
-      [newGuestId, `guest_${newGuestId}`.slice(0, 50), guestEmail, hashed],
-    );
-
-    req.session.guest_id = newGuestId;
-    req.user = { id: newGuestId, is_guest: true };
-    return next();
-  } catch (error) {
-    console.error('Failed to create guest user:', error);
-    return res.status(500).json({ message: 'Could not initialize session.' });
-  }
-}
-
-function requirePageAuth(req, res, next) {
-  if (process.env.NODE_ENV === 'test') {
-    req.user = { id: 1, email: 'test@example.com' };
-    return next();
-  }
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  res.redirect('/login.html');
-}
-
-const slotState = new Map(); // logId -> base items[]
-
-// --- API Routes ---
 app.use('/api/meals', requireApiAuth, mealRoutes);
 app.use('/api/reminders', requireApiAuth, reminderRoutes);
 
-// Log History API
 app.get('/api/logs', requireApiAuth, async (req, res) => {
   const limit = Math.min(100, Number(req.query.limit || 20));
   const offset = Math.max(0, Number(req.query.offset || 0));
@@ -250,7 +270,6 @@ app.get('/api/logs', requireApiAuth, async (req, res) => {
   `,
     [req.user.id, limit, offset],
   );
-
   rows.forEach((row) => {
     try {
       row.ai_raw = JSON.parse(row.ai_raw || 'null');
@@ -258,11 +277,9 @@ app.get('/api/logs', requireApiAuth, async (req, res) => {
       row.ai_raw = null;
     }
   });
-
   res.json({ ok: true, items: rows });
 });
 
-// Single Log API (for 409 refetch)
 app.get('/api/log/:id', requireApiAuth, async (req, res) => {
   const { id } = req.params;
   const { rows, rowCount } = await pool.query(
@@ -276,7 +293,6 @@ app.get('/api/log/:id', requireApiAuth, async (req, res) => {
   );
   if (!rowCount)
     return res.status(404).json({ ok: false, message: 'not found' });
-
   const item = rows[0];
   try {
     item.ai_raw = JSON.parse(item.ai_raw || 'null');
@@ -285,42 +301,31 @@ app.get('/api/log/:id', requireApiAuth, async (req, res) => {
   }
   item.image_url = item.image_url || null;
   item.meal_tag = item.meal_tag || null;
-
   res.json({ ok: true, item });
 });
 
-// --- Chat Log API (breakdown) ---
 app.post(
   '/log',
   upload.single('image'),
-  requireApiAuth,
+  requireApiAuth, // Added authentication middleware
   async (req, res, next) => {
     try {
       const message = (req.body?.message || '').trim();
       const file = req.file || null;
       const user_id = req.user?.id;
-
       if (!user_id || (!message && !file)) {
         return res.status(400).json({ ok: false, error: 'bad_request' });
       }
-
-      // 1. Analyze nutrition from text and/or image
       const analysisResult = await analyze({
         text: message,
         imageBuffer: file?.buffer,
         mime: file?.mimetype,
       });
-
-      // 画像のみ（message なし & req.file あり）のときにだけ、モック呼びを仕込む
       if (!message && req.file && process.env.GEMINI_MOCK === '1') {
         try {
           await geminiProvider.analyzeText({ text: '画像記録' });
-        } catch {
-          /* no-op */
-        }
+        } catch {}
       }
-
-      // 2. Store image if it exists
       let imageId = null;
       if (file && process.env.NODE_ENV !== 'test') {
         const imageUrl = await imageStorage.put(file.buffer, file.mimetype);
@@ -331,8 +336,6 @@ app.post(
         );
         imageId = mediaRows[0].id;
       }
-
-      // 3. Save the meal log with analysis results and image reference
       const { rows } = await pool.query(
         `INSERT INTO meal_logs
          (user_id, food_item, meal_type, consumed_at,
@@ -346,13 +349,11 @@ app.post(
           analysisResult.nutrition.protein_g,
           analysisResult.nutrition.fat_g,
           analysisResult.nutrition.carbs_g,
-          JSON.stringify(analysisResult), // Store the full analysis
+          JSON.stringify(analysisResult),
           imageId,
         ],
       );
       const logId = rows[0].id;
-
-      // 4. Return the API response
       res.status(200).json({
         ok: true,
         success: true,
@@ -362,8 +363,6 @@ app.post(
         nutrition: analysisResult.nutrition,
         breakdown: analysisResult.breakdown,
       });
-
-      // テスト用にスロットの状態を保存
       if (process.env.NODE_ENV === 'test') {
         slotState.set(logId, analysisResult.breakdown.items);
       }
@@ -373,7 +372,6 @@ app.post(
   },
 );
 
-// New endpoint for slot selection
 app.post(
   '/log/choose-slot',
   requireApiAuth,
@@ -386,7 +384,6 @@ app.post(
           .status(400)
           .json({ ok: false, message: 'logId and key are required' });
 
-      // test環境は in-memory で更新
       if (process.env.NODE_ENV === 'test') {
         const baseItems = slotState.get(logId);
         if (!Array.isArray(baseItems)) {
@@ -404,19 +401,14 @@ app.post(
           warnings,
           items: normItems,
         } = computeFromItems(updated);
-
         const dish = baseItems.dish || null;
         const confidence = baseItems.confidence ?? 0.7;
         const s = buildSlots(normItems);
         const newBreakdown = {
           items: normItems,
-          slots: {
-            rice_size: s.riceSlot,
-            pork_cut: s.porkSlot,
-          },
+          slots: { rice_size: s.riceSlot, pork_cut: s.porkSlot },
           warnings,
         };
-
         return res.status(200).json({
           success: true,
           ok: true,
@@ -433,7 +425,6 @@ app.post(
         });
       }
 
-      // 本番系（DB保存）
       const { rows, rowCount } = await pool.query(
         `SELECT id, ai_raw FROM meal_logs WHERE id=$1 AND user_id=$2`,
         [logId, req.user.id],
@@ -441,11 +432,9 @@ app.post(
       if (rowCount === 0) {
         return res.status(404).json({ ok: false, message: 'not found' });
       }
-
       const { ai_raw } = rows[0];
       const currentItems = ai_raw?.breakdown?.items || [];
       const updatedItems = applySlot(currentItems, { key, value });
-
       const {
         P,
         F,
@@ -455,7 +444,6 @@ app.post(
         items: normItems,
       } = computeFromItems(updatedItems);
       const slots = buildSlots(normItems);
-
       const dish = ai_raw?.dish || null;
       const confidence = ai_raw?.confidence ?? 0.7;
       const newBreakdown = {
@@ -463,7 +451,6 @@ app.post(
         slots: { rice_size: slots.riceSlot, pork_cut: slots.porkSlot },
         warnings,
       };
-
       const { rowCount: updateCount } = await pool.query(
         `UPDATE meal_logs SET 
          protein_g=$1, fat_g=$2, carbs_g=$3, calories=$4, 
@@ -473,11 +460,9 @@ app.post(
        WHERE id=$6 AND user_id=$7`,
         [P, F, C, kcal, JSON.stringify(newBreakdown), logId, req.user.id],
       );
-
       if (updateCount === 0) {
         return res.status(409).json({ ok: false, message: 'conflict' });
       }
-
       return res.status(200).json({
         success: true,
         ok: true,
@@ -498,7 +483,7 @@ app.post(
   },
 );
 
-// --- Multer Error Handling ---
+// --- Error Handlers ---
 app.use((err, req, res, next) => {
   if (err && err.name === 'MulterError') {
     const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
@@ -507,39 +492,18 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// --- Protected HTML Routes ---
-app.get('/', requirePageAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-app.get('/dashboard', requirePageAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-});
-app.get('/reminder-settings', requirePageAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'reminder-settings.html'));
-});
-
-app.get('/login.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-
-// 2) パスポートのセッション復元失敗を無害化するエラーハンドラ（最後尾）
 app.use((err, req, res, next) => {
   if (err && /deserialize user/i.test(err.message || '')) {
     try {
       if (req.session) req.session.destroy(() => {});
-      // 使っているクッキー名が既定なら connect.sid
       res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
-    } catch (_) {
-      // ignore errors
-    }
+    } catch (_) {}
     return res.status(401).json({ error: 'Session expired' });
   }
   return next(err);
 });
 
-// Centralized JSON error handler
 app.use((err, req, res, next) => {
-  // console.error(err.stack); // Already logged in routes
   if (res.headersSent) {
     return next(err);
   }
@@ -552,7 +516,6 @@ app.use((err, req, res, next) => {
 
 module.exports = app;
 
-// Compatibility shim for environments that still run `node server.js` directly
 if (require.main === module && process.env.NODE_ENV !== 'test') {
   console.warn(
     'Running server.js directly is deprecated. Please use start.js instead.',
