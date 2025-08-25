@@ -324,7 +324,15 @@ app.post(
       if (!message && req.file && process.env.GEMINI_MOCK === '1') {
         try {
           await geminiProvider.analyzeText({ text: '画像記録' });
-        } catch {}
+        } catch (_err) {
+          // 開発時のみデバッグに出す（本番では黙って握りつぶす設計）
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug(
+              'mock analyzeText prewarm failed:',
+              _err?.message || _err,
+            );
+          }
+        }
       }
       let imageId = null;
       if (file && process.env.NODE_ENV !== 'test') {
@@ -497,7 +505,14 @@ app.use((err, req, res, next) => {
     try {
       if (req.session) req.session.destroy(() => {});
       res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
-    } catch (_) {}
+    } catch (_err) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug(
+          'session cleanup error (ignored): ',
+          _err?.message || _err,
+        );
+      }
+    }
     return res.status(401).json({ error: 'Session expired' });
   }
   return next(err);
