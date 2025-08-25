@@ -41,16 +41,17 @@ ${textOnly}`;
 async function analyze({ text, imageBuffer, mime }) {
   if (process.env.GEMINI_MOCK === '1') {
     const inputText = text ?? '';
-    if (inputText.includes('カツ丼')) {
+    const t = inputText || '';
+    if (/(カツ丼|とんかつ|トンカツ|カツ定食)/.test(t)) {
       return {
-        dish: 'カツ丼',
-        confidence: 0.75, // ← 0.99 から修正
-        calories: 850,
+        dish: /カツ丼/.test(t) ? 'カツ丼' : 'とんかつ',
+        confidence: 0.75,
+        calories: 850, // This is not used directly, but good for consistency
         protein_g: 30,
         fat_g: 40,
         carbs_g: 85,
         items: [
-          { code: 'rice_cooked', qty_g: 300, include: true },
+          { code: 'rice_cooked', qty_g: 200, include: true },
           { code: 'pork_loin_cutlet', qty_g: 120, include: true },
         ],
       };

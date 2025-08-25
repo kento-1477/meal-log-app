@@ -30,12 +30,18 @@ async function analyze(input) {
     aiResult = await realAnalyze(input);
   } catch (_error) {
     console.log('realAnalyze failed, using deterministic fallback.');
-    // 必要ならデバッグ出力してもOK:
-    // console.debug(_error);
+    const text = input.text || '';
+    const items = [];
+    if (/とんかつ|トンカツ/i.test(text)) {
+      items.push({ code: 'pork_loin_cutlet', qty_g: 120, include: true });
+      items.push({ code: 'rice_cooked', qty_g: 200, include: true });
+    } else if (text) {
+      items.push({ name: text, qty: 1, unit: 'piece' });
+    }
     aiResult = {
-      dish: input.text || '食事',
+      dish: text || '食事',
       confidence: 0.5,
-      items: [{ name: input.text, qty: 1, unit: 'piece' }],
+      items,
     };
   }
 

@@ -20,10 +20,18 @@ function applySlot(items, { key, value }) {
     const idx = out.findIndex((i) => i.code === 'rice_cooked');
     if (idx >= 0) out[idx].qty_g = Number(value);
   } else if (key === 'pork_cut') {
-    const idx = out.findIndex((i) => /^pork_.*cutlet/.test(i.code));
-    if (idx >= 0)
-      out[idx].code =
-        value === 'ヒレ' ? 'pork_fillet_cutlet' : 'pork_loin_cutlet';
+    const v = String(value).trim().toLowerCase();
+    const isFillet = ['ヒレ', 'ﾋﾚ', 'ﾌｨﾚ', 'フィレ', 'fillet', 'filet'].some(
+      (s) => s.toLowerCase() === v,
+    );
+    const target = isFillet ? 'pork_fillet_cutlet' : 'pork_loin_cutlet';
+
+    const idx = out.findIndex((it) => (it.code || '').startsWith('pork_'));
+    if (idx >= 0) {
+      out[idx].code = target;
+    } else {
+      out.push({ code: target, qty_g: 120, include: true });
+    }
   }
   return out;
 }
