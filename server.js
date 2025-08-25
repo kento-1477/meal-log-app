@@ -371,7 +371,11 @@ app.post(
         nutrition: analysisResult.nutrition,
         breakdown: analysisResult.breakdown,
       });
-      if (process.env.NODE_ENV === 'test') {
+      const volatileOn =
+        process.env.NODE_ENV !== 'production' &&
+        (process.env.NODE_ENV === 'test' ||
+          process.env.ENABLE_VOLATILE_SLOTS === '1');
+      if (volatileOn) {
         slotState.set(logId, analysisResult.breakdown.items);
       }
     } catch (err) {
@@ -392,7 +396,11 @@ app.post(
           .status(400)
           .json({ ok: false, message: 'logId and key are required' });
 
-      if (process.env.NODE_ENV === 'test') {
+      const volatileOn =
+        process.env.NODE_ENV !== 'production' &&
+        (process.env.NODE_ENV === 'test' ||
+          process.env.ENABLE_VOLATILE_SLOTS === '1');
+      if (volatileOn) {
         const baseItems = slotState.get(logId);
         if (!Array.isArray(baseItems)) {
           return res.status(400).json({
@@ -417,6 +425,7 @@ app.post(
           slots: { rice_size: s.riceSlot, pork_cut: s.porkSlot },
           warnings,
         };
+        slotState.set(logId, normItems); // Keep state for subsequent slot changes
         return res.status(200).json({
           success: true,
           ok: true,
