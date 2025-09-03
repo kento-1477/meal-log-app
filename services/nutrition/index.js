@@ -69,6 +69,7 @@ async function analyze(input) {
       breakdown: {
         items: aiResult.items ?? [],
         slots,
+        warnings: aiResult.warnings ?? [],
       },
     };
   }
@@ -90,6 +91,7 @@ async function analyze(input) {
     breakdown: {
       items: normItems,
       slots,
+      warnings: warnings,
     },
   };
 }

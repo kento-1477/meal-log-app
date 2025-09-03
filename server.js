@@ -414,7 +414,7 @@ app.post(
           F,
           C,
           kcal,
-          warnings,
+          warnings: slotWarnings,
           items: normItems,
         } = computeFromItems(updated);
         const dish = baseItems.dish || null;
@@ -423,6 +423,7 @@ app.post(
         const newBreakdown = {
           items: normItems,
           slots,
+          warnings: slotWarnings,
         };
         slotState.set(logId, normItems); // Keep state for subsequent slot changes
         return res.status(200).json({
@@ -456,7 +457,7 @@ app.post(
         F,
         C,
         kcal,
-        warnings,
+        warnings: slotWarnings,
         items: normItems,
       } = computeFromItems(updatedItems);
       const slots = buildSlots(normItems);
@@ -465,6 +466,7 @@ app.post(
       const newBreakdown = {
         items: normItems,
         slots,
+        warnings: slotWarnings,
       };
       const { rowCount: updateCount } = await pool.query(
         `UPDATE meal_logs SET 
