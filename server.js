@@ -371,7 +371,11 @@ app.post(
         nutrition: analysisResult.nutrition,
         breakdown: analysisResult.breakdown,
       });
-      if (process.env.NODE_ENV === 'test') {
+      const volatileOn =
+        process.env.NODE_ENV !== 'production' &&
+        (process.env.NODE_ENV === 'test' ||
+          process.env.ENABLE_VOLATILE_SLOTS === '1');
+      if (volatileOn) {
         slotState.set(logId, analysisResult.breakdown.items);
       }
     } catch (err) {
@@ -392,7 +396,11 @@ app.post(
           .status(400)
           .json({ ok: false, message: 'logId and key are required' });
 
-      if (process.env.NODE_ENV === 'test') {
+      const volatileOn =
+        process.env.NODE_ENV !== 'production' &&
+        (process.env.NODE_ENV === 'test' ||
+          process.env.ENABLE_VOLATILE_SLOTS === '1');
+      if (volatileOn) {
         const baseItems = slotState.get(logId);
         if (!Array.isArray(baseItems)) {
           return res.status(400).json({
@@ -406,28 +414,29 @@ app.post(
           F,
           C,
           kcal,
-          warnings,
+          warnings: slotWarnings,
           items: normItems,
         } = computeFromItems(updated);
         const dish = baseItems.dish || null;
         const confidence = baseItems.confidence ?? 0.7;
-        const s = buildSlots(normItems);
+        const slots = buildSlots(normItems);
         const newBreakdown = {
           items: normItems,
-          slots: { rice_size: s.riceSlot, pork_cut: s.porkSlot },
-          warnings,
+          slots,
+          warnings: slotWarnings,
         };
+        slotState.set(logId, normItems); // Keep state for subsequent slot changes
         return res.status(200).json({
           success: true,
           ok: true,
           logId: logId,
+          dish: dish,
+          confidence: confidence,
           nutrition: {
             protein_g: P,
             fat_g: F,
             carbs_g: C,
             calories: kcal,
-            dish: dish,
-            confidence: confidence,
           },
           breakdown: newBreakdown,
         });
@@ -448,7 +457,7 @@ app.post(
         F,
         C,
         kcal,
-        warnings,
+        warnings: slotWarnings,
         items: normItems,
       } = computeFromItems(updatedItems);
       const slots = buildSlots(normItems);
@@ -456,8 +465,8 @@ app.post(
       const confidence = ai_raw?.confidence ?? 0.7;
       const newBreakdown = {
         items: normItems,
-        slots: { rice_size: slots.riceSlot, pork_cut: slots.porkSlot },
-        warnings,
+        slots,
+        warnings: slotWarnings,
       };
       const { rowCount: updateCount } = await pool.query(
         `UPDATE meal_logs SET 
@@ -475,13 +484,13 @@ app.post(
         success: true,
         ok: true,
         logId: logId,
+        dish: dish,
+        confidence: confidence,
         nutrition: {
           protein_g: P,
           fat_g: F,
           carbs_g: C,
           calories: kcal,
-          dish,
-          confidence,
         },
         breakdown: newBreakdown,
       });

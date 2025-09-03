@@ -30,16 +30,33 @@ async function analyze(input) {
     aiResult = await realAnalyze(input);
   } catch (_error) {
     console.log('realAnalyze failed, using deterministic fallback.');
-    // 必要ならデバッグ出力してもOK:
-    // console.debug(_error);
-    aiResult = {
-      dish: input.text || '食事',
-      confidence: 0.5,
-      items: [{ name: input.text, qty: 1, unit: 'piece' }],
-    };
+    const text = input.text || '';
+    let items = [];
+
+    if (/とんかつ|トンカツ/i.test(text)) {
+      items = [
+        { code: 'pork_loin_cutlet', qty_g: 120, include: true },
+        { code: 'rice_cooked', qty_g: 200, include: true },
+      ];
+    } else if (/ハンバーグ/i.test(text)) {
+      items = [
+        { code: 'hamburger_steak', qty_g: 150, include: true },
+        { code: 'rice_cooked', qty_g: 200, include: true },
+      ];
+    } else if (/カレー|カレーライス/i.test(text)) {
+      items = [{ code: 'curry_rice', qty_g: 300, include: true }];
+    }
+
+    // If no keywords match, use a generic fallback to avoid 0kcal results
+    if (items.length === 0 && text) {
+      items = [{ code: 'rice_cooked', qty_g: 200, include: true }];
+    }
+
+    aiResult = { dish: text || '食事', confidence: 0.5, items };
   }
 
   if (aiResult && typeof aiResult.calories === 'number') {
+    const slots = buildSlots(aiResult.items ?? []);
     return {
       dish: aiResult.dish,
       confidence: aiResult.confidence ?? 0.6,
@@ -51,16 +68,8 @@ async function analyze(input) {
       },
       breakdown: {
         items: aiResult.items ?? [],
-        slots: {
-          rice_size: buildSlots(aiResult.items ?? []).riceSlot,
-          pork_cut: buildSlots(aiResult.items ?? []).porkSlot,
-        },
-        warnings: [],
-      },
-      snapshot: {
-        used_food_codes: (aiResult.items ?? [])
-          .map((i) => i.code)
-          .filter(Boolean),
+        slots,
+        warnings: aiResult.warnings ?? [],
       },
     };
   }
@@ -73,8 +82,7 @@ async function analyze(input) {
     warnings,
     items: normItems,
   } = computeFromItems(aiResult.items || []);
-  const s = buildSlots(normItems);
-  const slots = { rice_size: s.riceSlot, pork_cut: s.porkSlot };
+  const slots = buildSlots(normItems);
 
   return {
     dish: aiResult.dish,
@@ -83,9 +91,8 @@ async function analyze(input) {
     breakdown: {
       items: normItems,
       slots,
-      warnings,
+      warnings: warnings,
     },
-    snapshot: { used_food_codes: normItems.map((i) => i.code) },
   };
 }
 
