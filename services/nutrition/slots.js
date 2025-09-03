@@ -1,17 +1,31 @@
-function buildSlots(_items) {
-  // Example: Returns slot definitions
-  const riceSlot = {
-    question: 'ご飯の量',
-    key: 'rice_size',
-    options: [150, 200, 300],
-    unit: 'g',
-  };
-  const porkSlot = {
-    question: '豚肉の種類',
-    key: 'pork_cut',
-    options: ['ロース', 'ヒレ'],
-  };
-  return { riceSlot, porkSlot };
+function buildSlots(items = []) {
+  const slots = {};
+
+  const hasRice = items.some((it) => it.code === 'rice_cooked');
+  if (hasRice) {
+    const rice = items.find((it) => it.code === 'rice_cooked');
+    slots.rice_size = {
+      key: 'rice_size',
+      question: 'ご飯の量は？',
+      options: [150, 200, 300],
+      selected: rice?.qty_g ?? 200,
+      unit: 'g',
+    };
+  }
+
+  const hasPork = items.some((it) => (it.code || '').startsWith('pork_'));
+  if (hasPork) {
+    const pork = items.find((it) => (it.code || '').startsWith('pork_'));
+    const selected = pork?.code === 'pork_fillet_cutlet' ? 'ヒレ' : 'ロース';
+    slots.pork_cut = {
+      key: 'pork_cut',
+      question: '部位は？',
+      options: ['ロース', 'ヒレ'],
+      selected,
+    };
+  }
+
+  return slots;
 }
 
 function applySlot(items, { key, value }) {

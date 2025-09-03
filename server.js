@@ -419,24 +419,23 @@ app.post(
         } = computeFromItems(updated);
         const dish = baseItems.dish || null;
         const confidence = baseItems.confidence ?? 0.7;
-        const s = buildSlots(normItems);
+        const slots = buildSlots(normItems);
         const newBreakdown = {
           items: normItems,
-          slots: { rice_size: s.riceSlot, pork_cut: s.porkSlot },
-          warnings,
+          slots,
         };
         slotState.set(logId, normItems); // Keep state for subsequent slot changes
         return res.status(200).json({
           success: true,
           ok: true,
           logId: logId,
+          dish: dish,
+          confidence: confidence,
           nutrition: {
             protein_g: P,
             fat_g: F,
             carbs_g: C,
             calories: kcal,
-            dish: dish,
-            confidence: confidence,
           },
           breakdown: newBreakdown,
         });
@@ -465,8 +464,7 @@ app.post(
       const confidence = ai_raw?.confidence ?? 0.7;
       const newBreakdown = {
         items: normItems,
-        slots: { rice_size: slots.riceSlot, pork_cut: slots.porkSlot },
-        warnings,
+        slots,
       };
       const { rowCount: updateCount } = await pool.query(
         `UPDATE meal_logs SET 
@@ -484,13 +482,13 @@ app.post(
         success: true,
         ok: true,
         logId: logId,
+        dish: dish,
+        confidence: confidence,
         nutrition: {
           protein_g: P,
           fat_g: F,
           carbs_g: C,
           calories: kcal,
-          dish,
-          confidence,
         },
         breakdown: newBreakdown,
       });
