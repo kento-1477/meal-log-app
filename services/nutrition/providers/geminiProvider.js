@@ -41,30 +41,12 @@ ${textOnly}`;
 async function analyze({ text, imageBuffer, mime }) {
   if (process.env.GEMINI_MOCK === '1') {
     const inputText = text ?? '';
-    const t = inputText || '';
-    if (/(カツ丼|とんかつ|トンカツ|カツ定食)/.test(t)) {
-      return {
-        dish: /カツ丼/.test(t) ? 'カツ丼' : 'とんかつ',
-        confidence: 0.75,
-        calories: 850, // This is not used directly, but good for consistency
-        protein_g: 30,
-        fat_g: 40,
-        carbs_g: 85,
-        items: [
-          { code: 'rice_cooked', qty_g: 200, include: true },
-          { code: 'pork_loin_cutlet', qty_g: 120, include: true },
-        ],
-      };
-    }
-    // デフォルトのモック
+    // Default mock returns an empty structure that matches the live API's schema.
+    // Specific mock cases should be handled by test fixtures, not if/else blocks.
     return {
       dish: inputText || '食事',
-      confidence: 0.75, // ← デフォも合わせておくと安全
-      calories: 420,
-      protein_g: 15,
-      fat_g: 10,
-      carbs_g: 65,
-      items: [{ code: 'rice_cooked', qty_g: 200, include: true }],
+      confidence: 0,
+      items: [],
     };
   }
 

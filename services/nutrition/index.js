@@ -1,6 +1,8 @@
 const geminiProvider = require('./providers/geminiProvider');
 const { computeFromItems } = require('./compute');
 const { buildSlots } = require('./slots');
+const { findArchetype } = require('./archetypeMatcher');
+const { resolveNames } = require('./nameResolver');
 
 async function realAnalyze(input) {
   const aiEnabled =
@@ -28,31 +30,64 @@ async function analyze(input) {
   let aiResult;
   try {
     aiResult = await realAnalyze(input);
+    aiResult.landing_type = aiResult.landing_type || 'ai_exact';
   } catch (_error) {
-    console.log('realAnalyze failed, using deterministic fallback.');
+    // If AI provider itself fails, set a default empty structure
+    aiResult = {
+      dish: input.text || '食事',
+      confidence: 0,
+      items: [],
+      landing_type: 'ai_error',
+    };
+  }
+
+  // If AI returns no items, try to find an archetype
+  if (aiResult && aiResult.items && aiResult.items.length === 0) {
+    const archetypeResult = findArchetype(input.text);
+    if (archetypeResult) {
+      console.log(
+        `AI result was empty, using archetype '${archetypeResult.archetype_id}'`,
+      );
+      aiResult = archetypeResult; // Replace AI result with archetype result
+    }
+  }
+
+  // If still no items, try the final deterministic keyword fallback
+  if (aiResult && aiResult.items && aiResult.items.length === 0) {
+    console.log('Falling back to deterministic keywords.');
     const text = input.text || '';
     let items = [];
-
-    if (/とんかつ|トンカツ/i.test(text)) {
+    // This is a deterministic fallback for when AI analysis fails.
+    // All items created here are unconfirmed and should be marked as pending.
+    if (/カツ丼|とんかつ|トンカツ/i.test(text)) {
       items = [
-        { code: 'pork_loin_cutlet', qty_g: 120, include: true },
-        { code: 'rice_cooked', qty_g: 200, include: true },
+        { code: 'pork_loin_cutlet', qty_g: 120, include: true, pending: true },
+        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
       ];
     } else if (/ハンバーグ/i.test(text)) {
       items = [
-        { code: 'hamburger_steak', qty_g: 150, include: true },
-        { code: 'rice_cooked', qty_g: 200, include: true },
+        { code: 'hamburger_steak', qty_g: 150, include: true, pending: true },
+        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
       ];
     } else if (/カレー|カレーライス/i.test(text)) {
-      items = [{ code: 'curry_rice', qty_g: 300, include: true }];
+      items = [
+        { code: 'curry_rice', qty_g: 300, include: true, pending: true },
+      ];
     }
 
-    // If no keywords match, use a generic fallback to avoid 0kcal results
-    if (items.length === 0 && text) {
-      items = [{ code: 'rice_cooked', qty_g: 200, include: true }];
+    // Fallback for "Teishoku" (set meal) to add pending rice
+    if (items.length === 0 && /(定食|teishoku)/i.test(text)) {
+      items = [
+        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
+      ];
     }
-
-    aiResult = { dish: text || '食事', confidence: 0.5, items };
+    // Overwrite aiResult with fallback results
+    aiResult = {
+      dish: text || '食事',
+      confidence: 0,
+      items,
+      landing_type: 'fallback_keyword',
+    };
   }
 
   if (aiResult && typeof aiResult.calories === 'number') {
@@ -82,14 +117,24 @@ async function analyze(input) {
     warnings,
     items: normItems,
   } = computeFromItems(aiResult.items || []);
-  const slots = buildSlots(normItems);
+  const slots = buildSlots(normItems, aiResult.archetype_id);
+  const resolvedItems = resolveNames(normItems);
+
+  aiResult.base_confidence = aiResult.base_confidence ?? aiResult.confidence;
+  // If any items are pending, the overall confidence must be 0.
+  if (resolvedItems.some((i) => i.pending)) {
+    aiResult.confidence = 0;
+  }
 
   return {
     dish: aiResult.dish,
     confidence: aiResult.confidence,
+    base_confidence: aiResult.base_confidence, // Add base_confidence here
+    archetype_id: aiResult.archetype_id, // Pass through the archetype_id if it exists
+    landing_type: aiResult.landing_type, // Pass through the landing_type
     nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
     breakdown: {
-      items: normItems,
+      items: resolvedItems,
       slots,
       warnings: warnings,
     },
@@ -100,4 +145,4 @@ async function analyzeLegacy(input) {
   return analyze(input);
 }
 
-module.exports = { analyze, analyzeLegacy };
+module.exports = { analyze, analyzeLegacy, computeFromItems };
