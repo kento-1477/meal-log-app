@@ -11,6 +11,8 @@ const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
 const { analyze, computeFromItems } = require('./services/nutrition');
 const { LogItemSchema } = require('./schemas/logItem');
+const client = require('prom-client');
+const { aiRawParseFail, chooseSlotMismatch } = require('./metrics/aiRaw');
 const {
   createInitialSlots,
   applySlot,
@@ -253,6 +255,11 @@ app.get('/api/ai-advice', requireApiAuth, async (req, res) => {
 app.use('/api/meals', requireApiAuth, mealRoutes);
 app.use('/api/reminders', requireApiAuth, reminderRoutes);
 
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
+
 app.get('/api/logs', requireApiAuth, async (req, res) => {
   const limit = Math.min(100, Number(req.query.limit || 20));
   const offset = Math.max(0, Number(req.query.offset || 0));
@@ -296,7 +303,9 @@ app.get('/api/log/:id', requireApiAuth, async (req, res) => {
   if (typeof item.ai_payload === 'string') {
     try {
       item.ai_payload = JSON.parse(item.ai_payload);
-    } catch {}
+    } catch {
+      aiRawParseFail.inc();
+    }
   }
 
   // Rename ai_payload back to ai_raw for the client
@@ -573,7 +582,12 @@ app.post(
 
       const savedAiRaw = updatedRows?.[0]?.ai_raw ?? null;
       const newUpdatedAt = updatedRows?.[0]?.updated_at ?? null;
-      // TODO: Consider logging a warning if savedAiRaw is null or doesn't match newAnalysisResult
+      if (
+        savedAiRaw &&
+        JSON.stringify(savedAiRaw) !== JSON.stringify(newAnalysisResult)
+      ) {
+        chooseSlotMismatch.inc();
+      }
 
       return res.status(200).json({
         success: true,
