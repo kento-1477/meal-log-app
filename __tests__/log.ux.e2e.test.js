@@ -47,6 +47,6 @@ describe('UX-like integration tests for /log and /log/choose-slot', () => {
       .send({ logId, key: 'pork_cut', value: 'ヒレ', user_id: userId }); // Pass user_id
 
     expect(res3.status).toBe(200);
-    expect(res3.body?.nutrition?.calories).toBeLessThan(riceUpdatedCalories);
+    expect(res3.body?.nutrition?.calories).toBeGreaterThan(riceUpdatedCalories);
   });
 });

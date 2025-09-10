@@ -10,6 +10,7 @@ const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
 const { analyze, computeFromItems } = require('./services/nutrition');
+const { LogItemSchema } = require('./schemas/logItem');
 const {
   createInitialSlots,
   applySlot,
@@ -275,16 +276,40 @@ app.get('/api/log/:id', requireApiAuth, async (req, res) => {
   const { id } = req.params;
   const { rows, rowCount } = await pool.query(
     `
-    SELECT l.*, l.ai_raw::jsonb as ai_raw, m.url as image_url
-      FROM meal_logs l
-      LEFT JOIN media_assets m ON m.id = l.image_id
-     WHERE l.id = $1 AND l.user_id = $2
+    SELECT
+      l.id, l.user_id, l.food_item, l.meal_type, l.consumed_at,
+      l.created_at, l.updated_at, l.protein_g, l.fat_g, l.carbs_g, l.calories,
+      l.meal_tag, l.landing_type, l.image_id,
+      l.ai_raw::jsonb AS ai_payload,
+      m.url AS image_url
+    FROM meal_logs l
+    LEFT JOIN media_assets m ON m.id = l.image_id
+    WHERE l.id = $1 AND l.user_id = $2
   `,
     [id, req.user.id],
   );
   if (!rowCount)
     return res.status(404).json({ ok: false, message: 'not found' });
+
   const item = rows[0];
+  // Final guard: If TypeParser failed, manually parse it.
+  if (typeof item.ai_payload === 'string') {
+    try {
+      item.ai_payload = JSON.parse(item.ai_payload);
+    } catch {}
+  }
+
+  // Rename ai_payload back to ai_raw for the client
+  item.ai_raw = item.ai_payload;
+  delete item.ai_payload;
+
+  try {
+    LogItemSchema.parse(item);
+  } catch (e) {
+    // ここでアラート/ログ
+    console.error({ err: e, item }, 'log-item schema violation');
+    return res.status(500).json({ ok: false, message: 'schema violation' });
+  }
 
   item.image_url = item.image_url || null;
   item.meal_tag = item.meal_tag || null;
@@ -343,7 +368,7 @@ app.post(
         `INSERT INTO meal_logs
        (user_id, food_item, meal_type, consumed_at,
         calories, protein_g, fat_g, carbs_g, ai_raw, image_id, landing_type)
-       VALUES (, , 'Chat Log', NOW(), , , , , ::jsonb, , )
+       VALUES ($1, $2, 'Chat Log', NOW(), $3, $4, $5, $6, $7::jsonb, $8, $9)
        RETURNING id`,
         [
           user_id,
@@ -386,7 +411,7 @@ app.post(
   express.json(),
   async (req, res, next) => {
     try {
-      const { logId, key, value } = req.body || {};
+      const { logId, key, value, prevUpdatedAt } = req.body || {}; // ISO文字列を期待
       if (!logId || !key)
         return res
           .status(400)
@@ -495,29 +520,61 @@ app.post(
         slots,
         warnings: slotWarnings,
       };
-      const { rowCount: updateCount } = await pool.query(
-        `UPDATE meal_logs SET 
-         protein_g=$1, fat_g=$2, carbs_g=$3, calories=$4, 
-         ai_raw = jsonb_set(jsonb_set(ai_raw, '{breakdown}', $5::jsonb, true), '{confidence}', to_jsonb($9), true), 
-         updated_at = NOW(),
-         protein=$1, fat=$2, carbs=$3, -- legacy columns
-         landing_type=$8
-       WHERE id=$6 AND user_id=$7`,
+      // Construct newAnalysisResult here
+      const _src =
+        typeof ai_raw === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(ai_raw);
+              } catch {
+                return {};
+              }
+            })()
+          : ai_raw || {};
+      const newAnalysisResult = {
+        ..._src,
+        dish,
+        confidence,
+        base_confidence: _src.base_confidence ?? _src.confidence ?? 0.3,
+        nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
+        breakdown: newBreakdown,
+      };
+
+      const { rows: updatedRows, rowCount: updateCount } = await pool.query(
+        `
+        UPDATE meal_logs SET
+          protein_g=$1, fat_g=$2, carbs_g=$3, calories=$4,
+          ai_raw = $5::jsonb,
+          updated_at = NOW(),
+          protein=$1, fat=$2, carbs=$3, -- legacy
+          landing_type=$8
+        WHERE id=$6 AND user_id=$7
+          AND (($9::timestamptz IS NULL) OR (updated_at = $9::timestamptz))
+        RETURNING id, ai_raw, updated_at
+      `,
         [
           P,
           F,
           C,
           kcal,
-          JSON.stringify(newBreakdown),
+          JSON.stringify(newAnalysisResult),
           logId,
           req.user.id,
           ai_raw?.landing_type,
-          confidence,
+          prevUpdatedAt || null,
         ],
       );
+
       if (updateCount === 0) {
-        return res.status(409).json({ ok: false, message: 'conflict' });
+        return res
+          .status(409)
+          .json({ ok: false, message: 'conflict: version mismatch' });
       }
+
+      const savedAiRaw = updatedRows?.[0]?.ai_raw ?? null;
+      const newUpdatedAt = updatedRows?.[0]?.updated_at ?? null;
+      // TODO: Consider logging a warning if savedAiRaw is null or doesn't match newAnalysisResult
+
       return res.status(200).json({
         success: true,
         ok: true,
@@ -531,6 +588,9 @@ app.post(
           calories: kcal,
         },
         breakdown: newBreakdown,
+        updatedAt: newUpdatedAt,
+        // For debugging, remove later:
+        // saved_ai_raw_from_db: savedAiRaw,
       });
     } catch (e) {
       return next(e);

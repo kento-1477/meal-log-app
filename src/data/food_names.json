@@ -1,0 +1,29 @@
+{
+  "rice_cooked": "ご飯",
+  "miso_soup": "味噌汁",
+  "tsukemono": "漬物",
+  "cabbage_raw": "キャベツ",
+
+  "beef_sukiyaki_style": "牛丼の具",
+  "ramen_noodles": "ラーメンの麺",
+  "ramen_soup_shoyu": "醤油スープ",
+  "chashu_pork": "チャーシュー",
+  "ajitama_egg": "味付け卵",
+  "menma": "メンマ",
+  "grilled_salmon": "鮭の塩焼き",
+  "curry_sauce_jp": "カレーソース",
+
+  "pork_loin_cutlet": "ロースとんかつ",
+  "pork_fillet_cutlet": "ヒレかつ",
+  "karaage_chicken": "鶏の唐揚げ",
+  "pork_shogayaki": "豚の生姜焼き",
+  "udon_noodles": "うどん",
+  "udon_soup": "うどんのつゆ",
+  "soba_noodles": "そば",
+  "soba_tsuyu": "そばつゆ",
+  "chicken_egg_donburi": "親子丼の具",
+  "pork_cutlet_donburi": "カツ丼の具",
+  "spaghetti_napolitan": "ナポリタン",
+
+  "hamburger_steak": "ハンバーグ"
+}

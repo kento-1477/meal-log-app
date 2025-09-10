@@ -30,7 +30,10 @@ describe('/log with Gemini Provider Integration Tests', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body.success).toBe(true);
-    expect(response.body.nutrition.calories).toBe(850);
+    // With the new logic, fallbacks result in pending items, so calories are 0 until confirmed.
+    expect(response.body.nutrition.calories).toBe(0);
+    expect(response.body.breakdown.items.every((i) => i.pending)).toBe(true);
+    expect(response.body.breakdown.items.length).toBe(2); // pork + rice
 
     const { rows } = await pool.query(
       'SELECT * FROM meal_logs WHERE user_id = $1',
@@ -38,10 +41,12 @@ describe('/log with Gemini Provider Integration Tests', () => {
     );
     expect(rows.length).toBe(1);
     expect(rows[0].food_item).toBe('カツ丼');
-    expect(Number(rows[0].calories)).toBe(850);
+    // The initial logged calories should be 0 as the items are pending
+    expect(Number(rows[0].calories)).toBe(0);
     const raw = rows[0].ai_raw;
-    expect(
-      (typeof raw === 'string' ? JSON.parse(raw) : raw).confidence,
-    ).toBeCloseTo(0.75, 2);
+    // Confidence is 0 for deterministic fallbacks
+    expect((typeof raw === 'string' ? JSON.parse(raw) : raw).confidence).toBe(
+      0,
+    );
   });
 });
