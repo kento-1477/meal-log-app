@@ -1,5 +1,5 @@
 const geminiProvider = require('./providers/geminiProvider');
-const { computeFromItems } = require('./compute');
+const { computeFromItems } = require('./computeFromItems');
 const { buildSlots } = require('./slots');
 const { findArchetype } = require('./archetypeMatcher');
 const { resolveNames } = require('./nameResolver');

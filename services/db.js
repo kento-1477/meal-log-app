@@ -37,7 +37,11 @@ const pool = new Pool({
 // --- DEBUG only ---
 const _origQuery = pool.query.bind(pool);
 pool.query = (text, params, ...rest) => {
-  const placeholders = (text.match(/\$\d+/g) || []).length;
+  const m = text.match(/\$(\d+)/g) || [];
+  const maxIndex = m.length
+    ? Math.max(...m.map((s) => parseInt(s.slice(1), 10)))
+    : 0;
+  const placeholders = maxIndex;
   const count = Array.isArray(params) ? params.length : 0;
   if (count !== placeholders) {
     console.error('[SQL PARAM MISMATCH]', { placeholders, count, text });
