@@ -1,6 +1,6 @@
 const archetypesData = require('../../src/data/archetypes.json');
 
-function buildSlots(items = [], archetypeId = null) {
+function buildSlots(_items = [], archetypeId = null) {
   const slots = {};
 
   if (archetypeId) {

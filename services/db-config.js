@@ -70,12 +70,13 @@ function buildPgConnection(env) {
     };
   }
 
-  const needSSL =
-    /\bsslmode=require\b/i.test(url) || process.env.DB_SSL === '1';
+  const useSsl = /\bsslmode=require\b/i.test(url) || process.env.DB_SSL === '1';
   // The standard connection object using a connection string.
   return {
     connectionString: url,
-    ssl: needSSL ? { rejectUnauthorized: false } : false,
+    ssl: useSsl
+      ? { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === '1' }
+      : false,
   };
 }
 

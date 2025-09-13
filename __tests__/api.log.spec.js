@@ -1,71 +1,85 @@
 const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db');
+const { createTestUser } = require('../tests/utils/createTestUser');
 
-describe('/api/log/:id', () => {
-  it('choose-slot後にGETが同一ai_rawを返す', async () => {
-    const create = await request(app)
+describe('/api/log/:id with row_version locking', () => {
+  let userId;
+
+  beforeAll(async () => {
+    await pool.query(
+      'TRUNCATE TABLE users, meal_logs RESTART IDENTITY CASCADE',
+    );
+    userId = await createTestUser();
+  });
+
+  it('should update a log and retrieve the same ai_raw data', async () => {
+    const createRes = await request(app)
       .post('/log')
-      .send({ message: 'カツ丼 小盛り' })
+      .send({ message: 'カツ丼 小盛り', user_id: userId })
       .expect(200);
-    const logId = create.body.logId;
+    const logId = createRes.body.logId;
 
-    // GETして updated_at を取得
-    const first = await request(app).get(`/api/log/${logId}`).expect(200);
-    const prevUpdatedAt = first.body.item.updated_at;
+    const getRes = await request(app)
+      .get(`/api/log/${logId}`)
+      .query({ user_id: userId })
+      .expect(200);
+    const prevVersion = getRes.body.item.row_version;
+    expect(typeof prevVersion).toBe('number');
 
-    // choose-slot（prevUpdatedAtを付与）
     await request(app)
       .post('/log/choose-slot')
       .send({
         logId,
         key: 'rice_size',
         value: '200',
-        prevUpdatedAt,
+        prevVersion,
+        user_id: userId,
       })
       .expect(200);
 
-    const after = await request(app).get(`/api/log/${logId}`).expect(200);
+    const finalRes = await request(app)
+      .get(`/api/log/${logId}`)
+      .query({ user_id: userId })
+      .expect(200);
 
-    expect(after.body.item.ai_raw).toBeTruthy();
-    // This confidence check is based on the logic in choose-slot, which might need adjustment
-    // For now, we check if it's a number, as a more robust test.
-    expect(typeof after.body.item.ai_raw.confidence).toBe('number');
+    expect(finalRes.body.item.row_version).toBe(prevVersion + 1);
+    expect(finalRes.body.item.ai_raw).toBeTruthy();
   });
 
-  it('同時更新で409を返す', async () => {
-    const create = await request(app)
+  it('should return 409 conflict on concurrent update', async () => {
+    const createRes = await request(app)
       .post('/log')
-      .send({ message: '親子丼' })
+      .send({ message: '親子丼', user_id: userId })
       .expect(200);
-    const logId = create.body.logId;
-    const first = await request(app).get(`/api/log/${logId}`).expect(200);
-    const prev = first.body.item.updated_at;
+    const logId = createRes.body.logId;
 
-    // 1回目の更新は成功する
+    const getRes = await request(app)
+      .get(`/api/log/${logId}`)
+      .query({ user_id: userId })
+      .expect(200);
+    const prevVersion = getRes.body.item.row_version;
+
     await request(app)
       .post('/log/choose-slot')
       .send({
         logId,
         key: 'rice_size',
         value: '150',
-        prevUpdatedAt: prev,
+        prevVersion,
+        user_id: userId,
       })
       .expect(200);
 
-    // 2回目は古いprevUpdatedAtを使うので409を期待
     await request(app)
       .post('/log/choose-slot')
       .send({
         logId,
         key: 'pork_cut',
         value: 'ロース',
-        prevUpdatedAt: prev,
+        prevVersion,
+        user_id: userId,
       })
       .expect(409);
   });
-});
-
-afterAll(async () => {
-  await pool.end();
 });

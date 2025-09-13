@@ -1,6 +1,6 @@
-import { z } from 'zod';
+const { z } = require('zod');
 
-export const AiRawSchema = z
+const AiRawSchema = z
   .object({
     dish: z.string().optional(),
     confidence: z.number().min(0).max(1).optional(),
@@ -23,9 +23,14 @@ export const AiRawSchema = z
   })
   .passthrough();
 
-export const LogItemSchema = z.object({
+const LogItemSchema = z.object({
   id: z.string().uuid(),
   user_id: z.string().uuid(),
   // ...必要なフィールド
   ai_raw: AiRawSchema, // ここが肝。null を許可しない
 });
+
+module.exports = {
+  AiRawSchema,
+  LogItemSchema,
+};
