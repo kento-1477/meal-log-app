@@ -9,16 +9,16 @@
   "scripts": {
     "start": "node start.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
-    "test": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:rollback --all && npx dotenv-cli -e .env.test -- npx knex --env test migrate:latest && PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand",
+    "test": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:rollback --all && npx dotenv-cli -e .env.test -- npx knex --env test migrate:latest && ENABLE_VOLATILE_SLOTS=0 PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand",
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
     "migrate:make": "knex migrate:make",
     "migrate:rollback": "knex migrate:rollback",
     "migrate:reset": "dotenv -e .env.test -- knex migrate:rollback --all && npm run migrate:test",
     "seed:make": "knex seed:make",
-    "migrate:dev": "npx dotenv-cli -e .env.development -- npx knex migrate:latest",
-    "seed:dev": "npx dotenv-cli -e .env.development -- npx knex seed:run",
-    "migrate:test": "npx dotenv-cli -e .env.test -- npx knex migrate:latest",
+    "migrate:dev": "npx dotenv-cli -e .env.development -o -- npx knex --env development migrate:latest",
+    "migrate:test": "npx dotenv-cli -e .env.test -o -- npx knex --env test migrate:latest",
+    "seed:dev": "npx dotenv-cli -e .env.development -o -- npx knex seed:run",
     "migrate:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex migrate:latest'",
     "seed:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex seed:run'",
     "psql:prod": "npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --",
@@ -49,9 +49,12 @@
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pg": "^8.16.3",
-    "update": "^0.7.4"
+    "prom-client": "^15.1.3",
+    "update": "^0.7.4",
+    "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@types/supertest": "^6.0.3",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cross-env": "^10.0.0",
@@ -72,6 +75,9 @@
       "reminders\\.cron\\.test\\.js$",
       "server\\.test\\.js$"
     ],
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/jest.setup.js"
+    ]
   }
 }

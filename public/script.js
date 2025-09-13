@@ -221,9 +221,15 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
 
   const h = document.createElement('div');
   h.className = 'nutri-header';
-  h.textContent = `🍱 ${nutrition?.dish || '食事'} ｜ 信頼度 ${Math.round(
-    (nutrition?.confidence ?? 0) * 100,
-  )}%`;
+
+  const items = breakdown?.items ?? [];
+  const isUncertain = items.length === 0 || items.some((it) => it.pending);
+
+  h.textContent = isUncertain
+    ? `🍱 ${nutrition?.dish || '食事'} ｜ ⚠️ 要確認`
+    : `🍱 ${nutrition?.dish || '食事'} ｜ 信頼度 ${Math.round(
+        (nutrition?.confidence ?? 0) * 100,
+      )}%`;
 
   const core = document.createElement('div');
   core.className = 'nutri-core';
@@ -232,12 +238,17 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
   card.appendChild(h);
   card.appendChild(core);
 
-  if (breakdown?.items?.length) {
+  if (items.length > 0) {
     const ul = document.createElement('ul');
     ul.className = 'nutri-items';
-    breakdown.items.slice(0, 5).forEach((it) => {
+    items.slice(0, 5).forEach((it) => {
       const li = document.createElement('li');
-      li.textContent = `${it.name || it.code} ${it.qty_g ?? ''}g`;
+      let text = `${it.name || it.code} ${it.qty_g ?? ''}g`;
+      if (it.pending) {
+        li.classList.add('pending-item');
+        text += ' (未確定)';
+      }
+      li.textContent = text;
       ul.appendChild(li);
     });
     card.appendChild(ul);

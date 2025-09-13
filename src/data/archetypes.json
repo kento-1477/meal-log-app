@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "units": "g",
+  "archetypes": [
+    {
+      "id": "gyudon",
+      "name": "牛丼",
+      "keywords": ["牛丼", "gyudon", "beef bowl"],
+      "portions": {
+        "small": { "rice_cooked": 180, "beef_sukiyaki_style": 80 },
+        "regular": { "rice_cooked": 250, "beef_sukiyaki_style": 100 },
+        "large": { "rice_cooked": 350, "beef_sukiyaki_style": 140 }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 500, "max": 800 } }
+    },
+    {
+      "id": "ramen_shoyu",
+      "name": "醤油ラーメン",
+      "keywords": [
+        "ラーメン",
+        "らーめん",
+        "ramen",
+        "醤油ラーメン",
+        "shoyu ramen"
+      ],
+      "portions": {
+        "regular": {
+          "ramen_noodles": 180,
+          "ramen_soup_shoyu": 400,
+          "chashu_pork": 40,
+          "ajitama_egg": 50,
+          "menma": 20
+        }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 450, "max": 700 } }
+    },
+    {
+      "id": "yakizakana_teishoku",
+      "name": "焼き魚定食",
+      "keywords": [
+        "焼き魚定食",
+        "焼魚定食",
+        "yakizakana teishoku",
+        "grilled fish"
+      ],
+      "portions": {
+        "regular": {
+          "rice_cooked": 200,
+          "miso_soup": 180,
+          "grilled_salmon": 120,
+          "tsukemono": 30
+        }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 550, "max": 850 } }
+    },
+    {
+      "id": "curry_jp",
+      "name": "カレーライス",
+      "keywords": ["カレー", "カレーライス", "curry", "kare"],
+      "portions": {
+        "regular": { "rice_cooked": 250, "curry_sauce_jp": 250 }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 600, "max": 900 } }
+    },
+    {
+      "id": "tonkatsu_teishoku",
+      "name": "とんかつ定食",
+      "keywords": ["とんかつ定食", "トンカツ定食", "tonkatsu teishoku"],
+      "portions": {
+        "regular": {
+          "rice_cooked": 200,
+          "pork_loin_cutlet": 120,
+          "miso_soup": 180,
+          "cabbage_raw": 50
+        }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 700, "max": 1000 } }
+    },
+    {
+      "id": "karaage_teishoku",
+      "name": "唐揚げ定食",
+      "keywords": ["唐揚げ定食", "からあげ定食", "karaage teishoku"],
+      "portions": {
+        "regular": {
+          "rice_cooked": 200,
+          "karaage_chicken": 150,
+          "miso_soup": 180,
+          "cabbage_raw": 50
+        }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 650, "max": 950 } }
+    },
+    {
+      "id": "shogayaki_teishoku",
+      "name": "生姜焼き定食",
+      "keywords": ["生姜焼き定食", "しょうが焼き定食", "shogayaki teishoku"],
+      "portions": {
+        "regular": {
+          "rice_cooked": 200,
+          "pork_shogayaki": 150,
+          "miso_soup": 180,
+          "cabbage_raw": 50
+        }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 600, "max": 900 } }
+    },
+    {
+      "id": "udon_kake",
+      "name": "かけうどん",
+      "keywords": ["かけうどん", "kake udon"],
+      "portions": {
+        "regular": { "udon_noodles": 230, "udon_soup": 350 }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 250, "max": 400 } }
+    },
+    {
+      "id": "soba_mori",
+      "name": "もりそば",
+      "keywords": ["もりそば", "mori soba"],
+      "portions": {
+        "regular": { "soba_noodles": 200, "soba_tsuyu": 100 }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 300, "max": 450 } }
+    },
+    {
+      "id": "oyakodon",
+      "name": "親子丼",
+      "keywords": ["親子丼", "oyakodon"],
+      "portions": {
+        "regular": { "rice_cooked": 250, "chicken_egg_donburi": 150 }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 550, "max": 750 } }
+    },
+    {
+      "id": "katsudon",
+      "name": "カツ丼",
+      "keywords": ["カツ丼", "katsudon"],
+      "portions": {
+        "regular": { "rice_cooked": 250, "pork_cutlet_donburi": 180 }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 800, "max": 1100 } }
+    },
+    {
+      "id": "napolitan",
+      "name": "ナポリタン",
+      "keywords": ["ナポリタン", "napolitan"],
+      "portions": {
+        "regular": { "spaghetti_napolitan": 250 }
+      },
+      "defaults": { "portion": "regular" },
+      "uncertainty": { "kcal": { "min": 500, "max": 700 } }
+    }
+  ]
+}

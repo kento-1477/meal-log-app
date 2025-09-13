@@ -406,3 +406,9 @@ body {
     min-width: 600px; /* テーブルの最小幅を指定 */
   }
 }
+
+/* Styles for pending nutrition items */
+.pending-item {
+  color: #888;
+  font-style: italic;
+}

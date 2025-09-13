@@ -31,10 +31,6 @@ describe('/log Endpoint Integration Tests', () => {
     userId = await createTestUser();
   });
 
-  afterAll(async () => {
-    await pool.end();
-  });
-
   test('should log a meal with only text and return success', async () => {
     const mealText = 'りんご一個';
     const initialCountResult = await pool.query(
@@ -74,11 +70,4 @@ describe('/log Endpoint Integration Tests', () => {
     expect(response.body.success).toBe(false);
     expect(response.body.error).toContain('violates foreign key constraint');
   });
-});
-
-afterAll(async () => {
-  const { pool } = require('../services/db.js');
-  if (pool && !pool.ended) {
-    await pool.end();
-  }
 });
