@@ -22,7 +22,8 @@
     "migrate:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex migrate:latest'",
     "seed:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex seed:run'",
     "psql:prod": "npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --",
-    "psql:app": "env -u DATABASE_URL npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL\" \"$@\"' --"
+    "psql:app": "env -u DATABASE_URL npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL\" \"$@\"' --",
+    "postinstall": "PGSSLMODE=require knex migrate:latest && PGSSLMODE=require knex seed:run"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
