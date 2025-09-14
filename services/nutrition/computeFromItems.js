@@ -52,16 +52,16 @@ function getGrams(it) {
   return Number.isFinite(n) ? n : 0;
 }
 
-const round1 = (x) => Math.round(x * 10) / 10;
+const { POLICY, finalizeTotals } = require('./policy.js');
 
-// 「油/揚げ」に対する経験則（吸油）
-function inferOilAbsorption(name, grams) {
-  const n = norm(name);
-  if (/揚|フライ|唐揚|から揚|天ぷら|とんかつ|豚カツ|カツ/i.test(n)) {
-    // 仕上がり重量の8%を吸油として加算（テストが上がりやすい値）
-    return Math.max(0, Math.round(grams * 0.08));
-  }
-  return 0;
+function addOilAbsorption(sum, finishedGrams, factor) {
+  const oilG = Math.max(0, Math.round((finishedGrams || 0) * factor));
+  // サラダ油の代表値（100gあたり）
+  sum.P += (0 * oilG) / 100;
+  sum.F += (100 * oilG) / 100;
+  sum.C += (0 * oilG) / 100;
+  sum.kcal += (900 * oilG) / 100;
+  return oilG;
 }
 
 function per100FromName(name) {
@@ -81,13 +81,11 @@ function per100FromName(name) {
 }
 
 // ★エクスポート：既存の呼び出しに合わせた形
-function computeFromItems(items = []) {
-  let P = 0,
-    F = 0,
-    C = 0,
-    kcal = 0,
-    warnings = [];
+function computeFromItems(items = [], dishName = '') {
+  const sumMid = { P: 0, F: 0, C: 0, kcal: 0 };
+  let warnings = [];
   const resolved = [];
+  let finishedGrams = 0;
 
   for (const it of items) {
     const name = it.name || it.ingredient || '';
@@ -96,30 +94,14 @@ function computeFromItems(items = []) {
       resolved.push({ ...it, pending: true });
       continue;
     }
-
-    // 唐揚げなど料理名に対する吸油ルール
-    const oilAdd = inferOilAbsorption(name, grams);
-    if (oilAdd > 0) {
-      // 別アイテムとして油を加算（UIに見えるように）
-      const oil = REP['サラダ油'];
-      P += (oil.P * oilAdd) / 100;
-      F += (oil.F * oilAdd) / 100;
-      C += (oil.C * oilAdd) / 100;
-      kcal += (oil.kcal * oilAdd) / 100;
-      resolved.push({
-        name: '吸油',
-        grams: oilAdd,
-        pending: false,
-        source: 'heuristic:oil',
-      });
-    }
+    finishedGrams += grams;
 
     const hit = per100FromName(name);
     if (hit) {
-      P += (hit.per100.P * grams) / 100;
-      F += (hit.per100.F * grams) / 100;
-      C += (hit.per100.C * grams) / 100;
-      kcal += (hit.per100.kcal * grams) / 100;
+      sumMid.P += (hit.per100.P * grams) / 100;
+      sumMid.F += (hit.per100.F * grams) / 100;
+      sumMid.C += (hit.per100.C * grams) / 100;
+      sumMid.kcal += (hit.per100.kcal * grams) / 100;
       resolved.push({
         ...it,
         pending: it.pending === true ? true : false,
@@ -131,15 +113,31 @@ function computeFromItems(items = []) {
     }
   }
 
-  const out = {
-    P: round1(P),
-    F: round1(F),
-    C: round1(C),
-    kcal: Math.round(kcal),
+  const isDeepFriedDish = /揚|フライ|唐揚|天ぷら/i.test(dishName);
+  let sumMin = null,
+    sumMax = null;
+
+  if (isDeepFriedDish) {
+    sumMin = { ...sumMid };
+    sumMax = { ...sumMid };
+    addOilAbsorption(sumMin, finishedGrams, POLICY.oilAbsorption.min);
+    addOilAbsorption(sumMid, finishedGrams, POLICY.oilAbsorption.mid);
+    addOilAbsorption(sumMax, finishedGrams, POLICY.oilAbsorption.max);
+  }
+
+  const out = finalizeTotals(sumMid, sumMin, sumMax);
+
+  // 互換性維持
+  return {
+    P: out.total.P,
+    F: out.total.F,
+    C: out.total.C,
+    kcal: out.total.kcal,
+    atwater: out.atwater,
+    range: out.range,
     warnings,
     items: resolved,
   };
-  return out;
 }
 
 module.exports = { computeFromItems };

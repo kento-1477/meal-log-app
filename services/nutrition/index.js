@@ -3,6 +3,7 @@ const { computeFromItems } = require('./computeFromItems');
 const { buildSlots } = require('./slots');
 const { findArchetype } = require('./archetypeMatcher');
 const { resolveNames } = require('./nameResolver');
+const { finalizeTotals } = require('./policy.js');
 
 async function realAnalyze(input) {
   const aiEnabled =
@@ -38,6 +39,44 @@ async function analyze(input) {
       confidence: 0,
       items: [],
       landing_type: 'ai_error',
+    };
+  }
+
+  if (aiResult?.labelNutrition?.perServing) {
+    const t = aiResult.labelNutrition.perServing;
+    const { total, atwater } = finalizeTotals({
+      P: t.P,
+      F: t.F,
+      C: t.C,
+      kcal: t.kcal,
+    });
+    return {
+      dish: aiResult.dish,
+      confidence: 1.0,
+      source: 'label',
+      nutrition: {
+        protein_g: total.P,
+        fat_g: total.F,
+        carbs_g: total.C,
+        calories: total.kcal,
+      },
+      atwater,
+      breakdown: {
+        items: [
+          {
+            name: '栄養成分表示(1食)',
+            grams: null,
+            source: 'label',
+            pending: false,
+            P: total.P,
+            F: total.F,
+            C: total.C,
+            kcal: total.kcal,
+          },
+        ],
+        slots: [],
+        warnings: [],
+      },
     };
   }
 
@@ -92,15 +131,24 @@ async function analyze(input) {
 
   if (aiResult && typeof aiResult.calories === 'number') {
     const slots = buildSlots(aiResult.items ?? []);
+    const { total, atwater, range } = finalizeTotals({
+      P: aiResult.protein_g ?? 0,
+      F: aiResult.fat_g ?? 0,
+      C: aiResult.carbs_g ?? 0,
+      kcal: aiResult.calories ?? 0,
+    });
+
     return {
       dish: aiResult.dish,
       confidence: aiResult.confidence ?? 0.6,
       nutrition: {
-        protein_g: aiResult.protein_g ?? 0,
-        fat_g: aiResult.fat_g ?? 0,
-        carbs_g: aiResult.carbs_g ?? 0,
-        calories: aiResult.calories ?? 0,
+        protein_g: total.P,
+        fat_g: total.F,
+        carbs_g: total.C,
+        calories: total.kcal,
       },
+      atwater,
+      range,
       breakdown: {
         items: aiResult.items ?? [],
         slots,
@@ -116,7 +164,9 @@ async function analyze(input) {
     kcal,
     warnings,
     items: normItems,
-  } = computeFromItems(aiResult.items || []);
+    atwater,
+    range,
+  } = computeFromItems(aiResult.items || [], aiResult.dish);
   const slots = buildSlots(normItems, aiResult.archetype_id);
   const resolvedItems = resolveNames(normItems);
 
@@ -133,6 +183,8 @@ async function analyze(input) {
     archetype_id: aiResult.archetype_id, // Pass through the archetype_id if it exists
     landing_type: aiResult.landing_type, // Pass through the landing_type
     nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
+    atwater,
+    range,
     breakdown: {
       items: resolvedItems,
       slots,
