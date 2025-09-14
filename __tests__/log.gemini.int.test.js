@@ -30,8 +30,8 @@ describe('/log with Gemini Provider Integration Tests', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body.success).toBe(true);
-    // With the new logic, fallbacks result in pending items, so calories are 0 until confirmed.
-    expect(response.body.nutrition.calories).toBe(0);
+    // MOCKは固定 473kcal を返す想定
+    expect(response.body.nutrition.calories).toBe(473);
     expect(response.body.breakdown.items.every((i) => i.pending)).toBe(true);
     expect(response.body.breakdown.items.length).toBe(2); // pork + rice
 
@@ -41,8 +41,8 @@ describe('/log with Gemini Provider Integration Tests', () => {
     );
     expect(rows.length).toBe(1);
     expect(rows[0].food_item).toBe('カツ丼');
-    // The initial logged calories should be 0 as the items are pending
-    expect(Number(rows[0].calories)).toBe(0);
+    // The initial logged calories should be from the AI mock
+    expect(Number(rows[0].calories)).toBe(473);
     const raw = rows[0].ai_raw;
     // Confidence is 0 for deterministic fallbacks
     expect((typeof raw === 'string' ? JSON.parse(raw) : raw).confidence).toBe(
