@@ -37,15 +37,19 @@ const pool = new Pool({
 // --- DEBUG only ---
 const _origQuery = pool.query.bind(pool);
 pool.query = (text, params, ...rest) => {
+  if (typeof text === 'string' && text.includes('INSERT INTO "session"')) {
+    return _origQuery(text, params, ...rest);
+  }
   const m = text.match(/\$(\d+)/g) || [];
   const maxIndex = m.length ? Math.max(...m.map((s) => +s.slice(1))) : 0;
   const count = Array.isArray(params) ? params.length : 0;
-  if (count !== maxIndex)
+  if (count !== maxIndex) {
     console.error('[SQL PARAM MISMATCH]', {
       placeholders: maxIndex,
       count,
       text,
     });
+  }
   return _origQuery(text, params, ...rest);
 };
 // --- /DEBUG ---
