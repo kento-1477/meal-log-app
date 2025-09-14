@@ -1,23 +1,21 @@
 // --- PG GLOBAL DEBUG (dev only) ---
 const { Client } = require('pg');
-const _ClientQuery = Client.prototype.query;
-Client.prototype.query = function (config, values, callback) {
-  let text, params;
-  if (typeof config === 'string') {
-    text = config;
-    params = values;
-  } else {
-    text = config && config.text;
-    params = config && config.values;
+const origClientQuery = Client.prototype.query;
+Client.prototype.query = function (text, params, ...rest) {
+  if (typeof text === 'string' && text.includes('INSERT INTO "session"')) {
+    return origClientQuery.call(this, text, params, ...rest);
   }
-  const placeholders = ((text && text.match(/\$\d+/g)) || []).length;
+  const m = (typeof text === 'string' ? text.match(/\$(\d+)/g) : null) || [];
+  const maxIndex = m.length ? Math.max(...m.map((s) => +s.slice(1))) : 0;
   const count = Array.isArray(params) ? params.length : 0;
-  if (count !== placeholders) {
-    console.error('[PG GLOBAL MISMATCH]', { placeholders, count, text });
-    console.error('params:', params);
-    console.error(new Error('stack trace').stack);
+  if (count !== maxIndex) {
+    console.error('[PG GLOBAL MISMATCH]', {
+      placeholders: maxIndex,
+      count,
+      text,
+    });
   }
-  return _ClientQuery.call(this, config, values, callback);
+  return origClientQuery.call(this, text, params, ...rest);
 };
 // --- /PG GLOBAL DEBUG ---
 
