@@ -365,33 +365,35 @@ app.post(
       const items = Array.isArray(analysisResult?.breakdown?.items)
         ? analysisResult.breakdown.items
         : [];
+      const isMock = String(process.env.GEMINI_MOCK || '') === '1';
       const allPending =
         items.length > 0 && items.every((i) => i?.pending === true);
-      const isMock = String(process.env.GEMINI_MOCK || '') === '1';
 
-      let agg = null;
+      let agg;
       try {
         agg = computeFromItems(items);
       } catch {
-        agg = null;
+        agg = { P: 0, F: 0, C: 0, kcal: 0 };
       }
 
-      const nutrition =
+      const nutritionGuarded =
         isMock && allPending
           ? { protein_g: 0, fat_g: 0, carbs_g: 0, calories: 0 }
           : {
-              protein_g: agg?.P ?? 0,
-              fat_g: agg?.F ?? 0,
-              carbs_g: agg?.C ?? 0,
-              calories: agg?.kcal ?? 0,
+              protein_g: agg.P,
+              fat_g: agg.F,
+              carbs_g: agg.C,
+              calories: agg.kcal,
             };
 
-      // ai_raw とレスポンスの両方で同じ形を使う
-      analysisResult.breakdown = {
-        ...(analysisResult.breakdown || {}),
-        items,
+      const finalAnalysisResult = {
+        ...(analysisResult || {}),
+        breakdown: {
+          ...((analysisResult && analysisResult.breakdown) || {}),
+          items,
+        },
+        nutrition: nutritionGuarded,
       };
-      analysisResult.nutrition = nutrition;
       // PATCH_LOG_GUARD_END
 
       if (!message && req.file && process.env.GEMINI_MOCK === '1') {
@@ -433,12 +435,12 @@ app.post(
        RETURNING id`,
         [
           user_id,
-          analysisResult.dish || message,
-          analysisResult.nutrition.calories,
-          analysisResult.nutrition.protein_g,
-          analysisResult.nutrition.fat_g,
-          analysisResult.nutrition.carbs_g,
-          JSON.stringify(analysisResult),
+          finalAnalysisResult.dish || message,
+          finalAnalysisResult.nutrition.calories,
+          finalAnalysisResult.nutrition.protein_g,
+          finalAnalysisResult.nutrition.fat_g,
+          finalAnalysisResult.nutrition.carbs_g,
+          JSON.stringify(finalAnalysisResult),
           imageId,
           landing_type,
         ],
@@ -448,10 +450,10 @@ app.post(
         ok: true,
         success: true,
         logId,
-        dish: analysisResult.dish,
-        confidence: analysisResult.confidence,
-        nutrition: analysisResult.nutrition,
-        breakdown: analysisResult.breakdown,
+        dish: finalAnalysisResult.dish,
+        confidence: finalAnalysisResult.confidence,
+        nutrition: finalAnalysisResult.nutrition,
+        breakdown: finalAnalysisResult.breakdown,
       });
       const volatileOn = process.env.ENABLE_VOLATILE_SLOTS === '1';
       if (volatileOn) {

@@ -122,7 +122,7 @@ function computeFromItems(items = []) {
       kcal += (hit.per100.kcal * grams) / 100;
       resolved.push({
         ...it,
-        pending: false,
+        pending: it.pending === true ? true : false,
         source: hit.source,
         per100: hit.per100,
       });
