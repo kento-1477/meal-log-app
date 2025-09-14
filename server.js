@@ -365,26 +365,35 @@ app.post(
       const items = Array.isArray(analysisResult?.breakdown?.items)
         ? analysisResult.breakdown.items
         : [];
-      const isMock = String(process.env.GEMINI_MOCK || '') === '1';
-      const allPending =
-        items.length > 0 && items.every((i) => i?.pending === true);
-
-      let agg;
-      try {
-        agg = computeFromItems(items);
-      } catch {
-        agg = { P: 0, F: 0, C: 0, kcal: 0 };
+      console.debug(
+        '[nutrition] aiNut=',
+        analysisResult?.nutrition,
+        'itemsLen=',
+        items.length,
+      );
+      const aiNut = analysisResult?.nutrition;
+      const hasAIDirect =
+        aiNut &&
+        [aiNut.calories, aiNut.protein_g, aiNut.fat_g, aiNut.carbs_g].some(
+          (v) => Number(v) > 0,
+        );
+      let nutritionGuarded;
+      if (hasAIDirect) {
+        // AIが出せた数値を最優先
+        nutritionGuarded = aiNut;
+      } else {
+        // 出せない時だけ items から再計算（揚げ物などに備えて dish 名も渡す）
+        let agg = { P: 0, F: 0, C: 0, kcal: 0 };
+        try {
+          agg = computeFromItems(items, analysisResult?.dish);
+        } catch {}
+        nutritionGuarded = {
+          protein_g: agg.P,
+          fat_g: agg.F,
+          carbs_g: agg.C,
+          calories: agg.kcal,
+        };
       }
-
-      const nutritionGuarded =
-        isMock && allPending
-          ? { protein_g: 0, fat_g: 0, carbs_g: 0, calories: 0 }
-          : {
-              protein_g: agg.P,
-              fat_g: agg.F,
-              carbs_g: agg.C,
-              calories: agg.kcal,
-            };
 
       const finalAnalysisResult = {
         ...(analysisResult || {}),
