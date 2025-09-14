@@ -38,17 +38,14 @@ const pool = new Pool({
 const _origQuery = pool.query.bind(pool);
 pool.query = (text, params, ...rest) => {
   const m = text.match(/\$(\d+)/g) || [];
-  const maxIndex = m.length
-    ? Math.max(...m.map((s) => parseInt(s.slice(1), 10)))
-    : 0;
-  const placeholders = maxIndex;
+  const maxIndex = m.length ? Math.max(...m.map((s) => +s.slice(1))) : 0;
   const count = Array.isArray(params) ? params.length : 0;
-  if (count !== placeholders) {
-    console.error('[SQL PARAM MISMATCH]', { placeholders, count, text });
-    console.error('params:', params);
-    // ここでスタックもあると便利
-    console.error(new Error('stack trace for mismatch').stack);
-  }
+  if (count !== maxIndex)
+    console.error('[SQL PARAM MISMATCH]', {
+      placeholders: maxIndex,
+      count,
+      text,
+    });
   return _origQuery(text, params, ...rest);
 };
 // --- /DEBUG ---

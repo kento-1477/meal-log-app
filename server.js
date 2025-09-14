@@ -360,6 +360,40 @@ app.post(
         imageBuffer: file?.buffer,
         mime: file?.mimetype,
       });
+
+      // PATCH_LOG_GUARD_START
+      const items = Array.isArray(analysisResult?.breakdown?.items)
+        ? analysisResult.breakdown.items
+        : [];
+      const allPending =
+        items.length > 0 && items.every((i) => i?.pending === true);
+      const isMock = String(process.env.GEMINI_MOCK || '') === '1';
+
+      let agg = null;
+      try {
+        agg = computeFromItems(items);
+      } catch {
+        agg = null;
+      }
+
+      const nutrition =
+        isMock && allPending
+          ? { protein_g: 0, fat_g: 0, carbs_g: 0, calories: 0 }
+          : {
+              protein_g: agg?.P ?? 0,
+              fat_g: agg?.F ?? 0,
+              carbs_g: agg?.C ?? 0,
+              calories: agg?.kcal ?? 0,
+            };
+
+      // ai_raw とレスポンスの両方で同じ形を使う
+      analysisResult.breakdown = {
+        ...(analysisResult.breakdown || {}),
+        items,
+      };
+      analysisResult.nutrition = nutrition;
+      // PATCH_LOG_GUARD_END
+
       if (!message && req.file && process.env.GEMINI_MOCK === '1') {
         try {
           await getGeminiProvider().analyzeText({ text: '画像記録' });
@@ -552,51 +586,60 @@ app.post(
         slots,
         warnings: slotWarnings,
       };
-      // Construct newAnalysisResult here
-      const _src =
+
+      const src =
         typeof ai_raw === 'string'
           ? (() => {
               try {
-                return JSON.parse(ai_raw);
+                return JSON.parse(ai_raw || '{}');
               } catch {
                 return {};
               }
             })()
           : ai_raw || {};
-      const newAnalysisResult = {
-        ..._src,
+
+      const items = newBreakdown.items;
+      const agg = computeFromItems(items);
+
+      const updatedAnalysisResult = {
+        ...src,
         dish,
         confidence,
-        base_confidence: _src.base_confidence ?? _src.confidence ?? 0.3,
-        nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
+        base_confidence: src.base_confidence ?? src.confidence ?? 0.3,
+        nutrition: {
+          protein_g: agg.P,
+          fat_g: agg.F,
+          carbs_g: agg.C,
+          calories: agg.kcal,
+        },
         breakdown: newBreakdown,
-        landing_type: _src.landing_type, // Ensure landing_type is carried over
+        landing_type: src.landing_type,
       };
 
+      const sql = `
+     UPDATE meal_logs SET
+       protein_g=$1, fat_g=$2, carbs_g=$3, calories=$4,
+       ai_raw=$5::jsonb, updated_at=NOW(),
+       protein=$1, fat=$2, carbs=$3,
+       landing_type=COALESCE($8, landing_type),
+       row_version=row_version+1
+     WHERE id=$6 AND user_id=$7 AND row_version=$9
+     RETURNING id, ai_raw, updated_at, row_version
+   `;
+      const params = [
+        agg.P,
+        agg.F,
+        agg.C,
+        agg.kcal,
+        JSON.stringify(updatedAnalysisResult),
+        logId,
+        req.user.id,
+        updatedAnalysisResult.landing_type ?? null,
+        prevVersion,
+      ];
       const { rows: updatedRows, rowCount: updateCount } = await pool.query(
-        `
-        UPDATE meal_logs SET
-          protein_g=$1, fat_g=$2, carbs_g=$3, calories=$4,
-          ai_raw = $5::jsonb,
-          updated_at = NOW(),
-          protein=$1, fat=$2, carbs=$3,        -- legacy互換
-          landing_type=COALESCE($8, landing_type),
-          row_version = row_version + 1
-        WHERE id=$6 AND user_id=$7
-          AND row_version = $9
-        RETURNING id, ai_raw, updated_at, row_version
-      `,
-        [
-          P,
-          F,
-          C,
-          kcal,
-          JSON.stringify(newAnalysisResult),
-          logId,
-          req.user.id,
-          newAnalysisResult?.landing_type ?? null, // Recommended: Pass null to keep existing
-          prevVersion,
-        ],
+        sql,
+        params,
       );
 
       if (updateCount === 0) {
@@ -609,7 +652,7 @@ app.post(
       const newUpdatedAt = updatedRows?.[0]?.updated_at ?? null;
       let newRowVersion = updatedRows?.[0]?.row_version ?? null;
 
-      // 念のため RETURNING で拾えなかった場合は最新を再読み込み
+      // 念のため、RETURNINGで row_version を拾えなかった場合は再読込
       if (newRowVersion == null) {
         const { rows: vrows } = await pool.query(
           'SELECT row_version FROM meal_logs WHERE id=$1 AND user_id=$2',
@@ -617,9 +660,11 @@ app.post(
         );
         newRowVersion = vrows?.[0]?.row_version ?? null;
       }
+
+      // AI結果の不一致メトリクス（統計用）
       if (
         savedAiRaw &&
-        JSON.stringify(savedAiRaw) !== JSON.stringify(newAnalysisResult)
+        JSON.stringify(savedAiRaw) !== JSON.stringify(updatedAnalysisResult)
       ) {
         chooseSlotMismatch.inc();
       }
@@ -627,20 +672,13 @@ app.post(
       return res.status(200).json({
         success: true,
         ok: true,
-        logId: logId,
-        dish: dish,
-        confidence: confidence,
-        nutrition: {
-          protein_g: P,
-          fat_g: F,
-          carbs_g: C,
-          calories: kcal,
-        },
+        logId,
+        dish,
+        confidence,
+        nutrition: updatedAnalysisResult.nutrition,
         breakdown: newBreakdown,
         updatedAt: newUpdatedAt,
-        row_version: newRowVersion, // ← すべての成功経路で必ず含める
-        // For debugging, remove later:
-        // saved_ai_raw_from_db: savedAiRaw,
+        row_version: newRowVersion,
       });
     } catch (e) {
       return next(e);
