@@ -97,11 +97,16 @@ async function analyze(input) {
   ) {
     const archetypeResult = findArchetype(input.text);
     if (archetypeResult) {
-      aiResult.items = archetypeResult.items || [];
-      aiResult.archetype_id = archetypeResult.archetype_id;
-      aiResult.dish = archetypeResult.dish;
-      aiResult.confidence = archetypeResult.confidence;
-      aiResult.landing_type = 'template_fallback';
+      console.debug(
+        '[nutrition] fallback=archetype',
+        archetypeResult.archetype_id,
+      );
+      aiResult = {
+        ...aiResult,
+        ...archetypeResult,
+        items: archetypeResult.items, // 既定量つきに置換
+        landing_type: 'template_fallback',
+      };
     }
   }
 
@@ -143,7 +148,13 @@ async function analyze(input) {
     };
   }
 
-  if (aiResult && typeof aiResult.calories === 'number') {
+  const hasDirect =
+    aiResult &&
+    ['calories', 'protein_g', 'fat_g', 'carbs_g'].some(
+      (k) => Number(aiResult?.[k]) > 0,
+    );
+  if (hasDirect) {
+    console.debug('[nutrition] path=direct');
     const slots = buildSlots(aiResult.items ?? []);
     const { total, atwater, range } = finalizeTotals({
       P: aiResult.protein_g ?? 0,
@@ -171,6 +182,7 @@ async function analyze(input) {
     };
   }
 
+  console.debug('[nutrition] path=items');
   let {
     P,
     F,
