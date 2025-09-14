@@ -127,6 +127,11 @@ function computeFromItems(items = [], dishName = '') {
 
   const out = finalizeTotals(sumMid, sumMin, sumMax);
 
+  /** totalが0で、すべてのアイテムが未確定/0gならここで保険（必要ならdefaultsForDishを呼ぶ） */
+  // if ((!sumMid.kcal || sumMid.kcal === 0) && Array.isArray(items) && items.length && items.every(i => !Number(i?.grams))) {
+  //   // TODO: dishNameに応じた既定レシピをここで適用し、finalizeTotalsでoutを上書きする実装を入れる
+  // }
+
   // 互換性維持
   return {
     P: out.total.P,

@@ -5,6 +5,15 @@ const { findArchetype } = require('./archetypeMatcher');
 const { resolveNames } = require('./nameResolver');
 const { finalizeTotals } = require('./policy.js');
 
+/** gramsが1つも確定していない配列なら true */
+function needsTemplateFallback(items) {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  return !items.some((it) => {
+    const g = Number(it?.grams);
+    return Number.isFinite(g) && g > 0;
+  });
+}
+
 async function realAnalyze(input) {
   const aiEnabled =
     process.env.ENABLE_AI === 'true' || process.env.GEMINI_MOCK === '1';
@@ -80,14 +89,19 @@ async function analyze(input) {
     };
   }
 
-  // If AI returns no items, try to find an archetype
-  if (aiResult && aiResult.items && aiResult.items.length === 0) {
+  if (
+    aiResult &&
+    (!Array.isArray(aiResult.items) ||
+      aiResult.items.length === 0 ||
+      needsTemplateFallback(aiResult.items))
+  ) {
     const archetypeResult = findArchetype(input.text);
     if (archetypeResult) {
-      console.log(
-        `AI result was empty, using archetype '${archetypeResult.archetype_id}'`,
-      );
-      aiResult = archetypeResult; // Replace AI result with archetype result
+      aiResult.items = archetypeResult.items || [];
+      aiResult.archetype_id = archetypeResult.archetype_id;
+      aiResult.dish = archetypeResult.dish;
+      aiResult.confidence = archetypeResult.confidence;
+      aiResult.landing_type = 'template_fallback';
     }
   }
 
@@ -157,7 +171,7 @@ async function analyze(input) {
     };
   }
 
-  const {
+  let {
     P,
     F,
     C,
@@ -167,6 +181,25 @@ async function analyze(input) {
     atwater,
     range,
   } = computeFromItems(aiResult.items || [], aiResult.dish);
+
+  if (!kcal || kcal === 0) {
+    const arch2 = findArchetype(aiResult.dish || input.text);
+    if (arch2?.items?.length) {
+      ({
+        P,
+        F,
+        C,
+        kcal,
+        atwater,
+        range,
+        warnings,
+        items: normItems,
+      } = computeFromItems(arch2.items, arch2.dish || aiResult.dish));
+      (warnings ||= []).push(
+        'AIの分量が不明だったため既定レシピで推定しました',
+      );
+    }
+  }
   const slots = buildSlots(normItems, aiResult.archetype_id);
   const resolvedItems = resolveNames(normItems);
 
