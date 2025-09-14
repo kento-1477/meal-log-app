@@ -386,7 +386,9 @@ app.post(
         let agg = { P: 0, F: 0, C: 0, kcal: 0 };
         try {
           agg = computeFromItems(items, analysisResult?.dish);
-        } catch {}
+        } catch {
+          /* empty */
+        }
         nutritionGuarded = {
           protein_g: agg.P,
           fat_g: agg.F,
