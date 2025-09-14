@@ -566,14 +566,8 @@ app.post(
         { key, value },
         ai_raw.archetype_id,
       );
-      const {
-        P,
-        F,
-        C,
-        kcal,
-        warnings: slotWarnings,
-        items: normItems,
-      } = computeFromItems(updatedItems);
+      const { warnings: slotWarnings, items: normItems } =
+        computeFromItems(updatedItems);
       const resolved = resolveNames(normItems);
       const slots = buildSlots(resolved, ai_raw?.archetype_id);
       const dish = ai_raw?.dish || null;
