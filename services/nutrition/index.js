@@ -159,21 +159,36 @@ async function analyze(input) {
     };
   }
 
-  const hasDirect =
+  const hasDirectRoot =
     aiResult &&
     ['calories', 'protein_g', 'fat_g', 'carbs_g'].some(
       (k) => Number(aiResult?.[k]) > 0,
     );
-  if (hasDirect) {
-    console.debug('[nutrition] path=direct');
+  const hasDirectNested =
+    aiResult?.nutrition &&
+    ['calories', 'protein_g', 'fat_g', 'carbs_g'].some(
+      (k) => Number(aiResult?.nutrition?.[k]) > 0,
+    );
+  if (hasDirectRoot || hasDirectNested) {
+    console.debug(
+      '[nutrition] path=direct%s',
+      hasDirectNested ? '(nested)' : '',
+    );
+    const p = Number(
+      aiResult?.protein_g ?? aiResult?.nutrition?.protein_g ?? 0,
+    );
+    const f = Number(aiResult?.fat_g ?? aiResult?.nutrition?.fat_g ?? 0);
+    const c = Number(aiResult?.carbs_g ?? aiResult?.nutrition?.carbs_g ?? 0);
+    const kcal = Number(
+      aiResult?.calories ?? aiResult?.nutrition?.calories ?? 0,
+    );
     const slots = buildSlots(aiResult.items ?? []);
     const { total, atwater, range } = finalizeTotals({
-      P: aiResult.protein_g ?? 0,
-      F: aiResult.fat_g ?? 0,
-      C: aiResult.carbs_g ?? 0,
-      kcal: aiResult.calories ?? 0,
+      P: p,
+      F: f,
+      C: c,
+      kcal,
     });
-
     return {
       dish: aiResult.dish,
       confidence: aiResult.confidence ?? 0.6,
