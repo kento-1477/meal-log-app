@@ -247,6 +247,20 @@ async function analyze(input) {
     aiResult.confidence = 0;
   }
 
+  // ★ ここから追加: フォールバック + 全pending の時は kcal を隠す（0に丸める）
+  const allPending =
+    resolvedItems.length > 0 && resolvedItems.every((i) => i.pending);
+  const isFallback =
+    aiResult.landing_type === 'template_fallback' ||
+    aiResult.landing_type === 'fallback_keyword';
+
+  if (isFallback && allPending) {
+    // 影響を最小化するため calories だけ 0 にします（P/F/C はそのまま）
+    kcal = 0;
+    // デバッグが欲しければ:
+    // console.debug('[nutrition] kcal masked because fallback+allPending');
+  }
+
   return {
     dish: aiResult.dish,
     confidence: aiResult.confidence,
