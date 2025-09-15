@@ -236,6 +236,9 @@ async function analyze(input) {
       (warnings ||= []).push(
         'AIの分量が不明だったため既定レシピで推定しました',
       );
+      // ★ 第2段フォールバックでも fallback 扱いだと明示する（丸めガードを発火させる）
+      aiResult.landing_type = aiResult.landing_type || 'template_fallback';
+      if (arch2.archetype_id) aiResult.archetype_id = arch2.archetype_id;
     }
   }
   const slots = buildSlots(normItems, aiResult.archetype_id);
@@ -252,7 +255,8 @@ async function analyze(input) {
     resolvedItems.length > 0 && resolvedItems.every((i) => i.pending);
   const isFallback =
     aiResult.landing_type === 'template_fallback' ||
-    aiResult.landing_type === 'fallback_keyword';
+    aiResult.landing_type === 'fallback_keyword' ||
+    Boolean(aiResult.archetype_id);
 
   if (isFallback && allPending) {
     // 影響を最小化するため calories だけ 0 にします（P/F/C はそのまま）
