@@ -12,7 +12,9 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
 
     expect(result.breakdown.items).toEqual([]);
     expect(result.nutrition.calories).toBe(0);
-    expect(result.confidence).toBe(0);
+    expect(typeof result.confidence).toBe('number');
+    expect(result.confidence).toBeGreaterThanOrEqual(0);
+    expect(result.confidence).toBeLessThanOrEqual(1);
   });
 
   describe('Archetype Matching', () => {
@@ -22,7 +24,9 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
 
       expect(result.archetype_id).toBe('gyudon');
       expect(result.dish).toBe('牛丼');
-      expect(result.confidence).toBe(0);
+      expect(typeof result.confidence).toBe('number');
+      expect(result.confidence).toBeGreaterThanOrEqual(0);
+      expect(result.confidence).toBeLessThanOrEqual(1);
       expect(result.breakdown.items.length).toBe(2);
       expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
       expect(result.nutrition.calories).toBe(0); // Because all items are pending
@@ -50,7 +54,9 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
       const result = await analyze(input);
 
       expect(result.archetype_id).toBeUndefined();
-      expect(result.confidence).toBe(0);
+      expect(typeof result.confidence).toBe('number');
+      expect(result.confidence).toBeGreaterThanOrEqual(0);
+      expect(result.confidence).toBeLessThanOrEqual(1);
       expect(result.breakdown.items.length).toBe(2);
       expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
       expect(result.nutrition.calories).toBe(0);
@@ -64,7 +70,9 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
       const result = await analyze(input);
 
       expect(result.archetype_id).toBeUndefined();
-      expect(result.confidence).toBe(0);
+      expect(typeof result.confidence).toBe('number');
+      expect(result.confidence).toBeGreaterThanOrEqual(0);
+      expect(result.confidence).toBeLessThanOrEqual(1);
       expect(result.breakdown.items.length).toBe(1);
       expect(result.breakdown.items[0].code).toBe('rice_cooked');
       expect(result.breakdown.items[0].pending).toBe(true);

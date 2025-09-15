@@ -60,6 +60,10 @@ const ALIAS = {
   醤油: '醤油',
   しょうゆ: '醤油',
   ショウユ: '醤油',
+  // キャベツ
+  cabbage: 'キャベツ',
+  shredded_cabbage: 'キャベツ',
+  キャベツ: 'キャベツ',
 };
 
 function canon(nameOrCode = '') {

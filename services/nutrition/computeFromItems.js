@@ -13,6 +13,7 @@ const REP = {
   鶏肉: { kcal: 197, P: 18.3, F: 12.1, C: 0.0 }, // 鶏もも生ベース
   豚肉: { kcal: 263, P: 20.5, F: 19.3, C: 0.0 }, // 生豚肉の代表値
   醤油: { kcal: 71, P: 7.7, F: 0.1, C: 3.4 }, // 少量なのでPFCは微小
+  キャベツ: { kcal: 23, P: 1.3, F: 0.1, C: 5.2 }, // 100gあたりの代表値（日本食品標準成分表に近い）
 };
 
 function getGrams(it) {
@@ -49,6 +50,9 @@ function per100FromName(name) {
   if (hit) return hit;
 
   // ヒューリスティック（最後の砦）
+  if (/キャベツ|cabbage/i.test(name)) {
+    return { per100: REP['キャベツ'], source: 'heuristic:cabbage' };
+  }
   if (/とんかつ|豚.?カツ/.test(name)) {
     return { per100: REP['とんかつ'], source: 'heuristic:tonkatsu_ja' };
   }
