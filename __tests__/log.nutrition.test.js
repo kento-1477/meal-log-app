@@ -64,4 +64,37 @@ describe('/log with nutrition', () => {
     expect(r.calories).toEqual(expect.any(String));
     expect(r.protein_g).toEqual(expect.any(String));
   });
+
+  it('should map english codes to JP reps and sum kcal correctly', async () => {
+    // Mock Gemini to return English codes for tonkatsu and rice
+    analyze.mockImplementationOnce(async () => ({
+      dish: 'とんかつ定食',
+      confidence: 0.9,
+      items: [
+        { code: 'pork_loin_cutlet', qty_g: 120, include: true },
+        { code: 'rice_cooked', qty_g: 200, include: true },
+      ],
+    }));
+
+    const res = await request(app)
+      .post('/log')
+      .field('user_id', userId)
+      .field('text', 'とんかつ定食'); // Provide text for analyze to use
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.logId).toBeDefined();
+
+    const kcal = res.body?.nutrition?.calories;
+    expect(kcal).toBeGreaterThan(0);
+    expect(res.body.breakdown.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'とんかつ',
+          per100: expect.any(Object),
+        }),
+        expect.objectContaining({ name: 'ごはん', per100: expect.any(Object) }),
+      ]),
+    );
+  });
 });

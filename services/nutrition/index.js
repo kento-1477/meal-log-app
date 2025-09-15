@@ -5,13 +5,24 @@ const { findArchetype } = require('./archetypeMatcher');
 const { resolveNames } = require('./nameResolver');
 const { finalizeTotals } = require('./policy.js');
 
+/**
+ * Checks if at least one item in the array has a usable gram value.
+ * Mirrors the logic of getGrams() in computeFromItems.js for consistency.
+ */
+function hasUsableGrams(items = []) {
+  if (!Array.isArray(items)) return false;
+  return items.some((it) => {
+    const raw =
+      it?.grams ?? it?.qty_g ?? it?.quantity_g ?? it?.g ?? it?.amount ?? 0;
+    const n = Number(String(raw).replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) && n > 0;
+  });
+}
+
 /** gramsが1つも確定していない配列なら true */
 function needsTemplateFallback(items) {
   if (!Array.isArray(items) || items.length === 0) return false;
-  return !items.some((it) => {
-    const g = Number(it?.grams);
-    return Number.isFinite(g) && g > 0;
-  });
+  return !hasUsableGrams(items);
 }
 
 async function realAnalyze(input) {
