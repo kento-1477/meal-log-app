@@ -78,5 +78,19 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
       expect(result.breakdown.items[0].pending).toBe(true);
       expect(result.nutrition.calories).toBe(0);
     });
+    it('should mask kcal to 0 for second-stage fallback with all pending items', async () => {
+      // Mock analyze to return 0 kcal initially, triggering second-stage fallback
+      // and ensure all items are pending.
+      const input = { text: '未知の料理' }; // Will trigger fallback
+      const result = await analyze(input);
+
+      // Ensure it went through the items path and second-stage fallback
+      expect(result.meta.fallback_level).toBe(2);
+      expect(result.meta.source_kind).toBe('recipe'); // From archetype
+      expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
+
+      // Kcal should be masked to 0 due to the guard
+      expect(result.nutrition.calories).toBe(0);
+    });
   });
 });
