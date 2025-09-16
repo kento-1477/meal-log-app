@@ -402,10 +402,7 @@ app.post(
         );
         imageId = mediaRows[0].id;
       }
-      const landing_type =
-        analysisResult?.landing_type ??
-        (analysisResult?.provider ||
-          (analysisResult?.archetype_id ? 'archetype' : 'deterministic'));
+      const landing_type = finalAnalysisResult.meta.source_kind;
 
       const { rows } = await pool.query(
         `INSERT INTO meal_logs
@@ -434,6 +431,8 @@ app.post(
         confidence: finalAnalysisResult.confidence,
         nutrition: finalAnalysisResult.nutrition,
         breakdown: finalAnalysisResult.breakdown,
+        meta: finalAnalysisResult.meta,
+        landing_type: finalAnalysisResult.meta.source_kind, // for backward compatibility
       });
       const volatileOn = process.env.ENABLE_VOLATILE_SLOTS === '1';
       if (volatileOn) {

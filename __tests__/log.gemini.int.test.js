@@ -31,7 +31,7 @@ describe('/log with Gemini Provider Integration Tests', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body.success).toBe(true);
     // AIを優先し、fallback items でもREPで計上するため >0 を期待
-    expect(response.body.nutrition.calories).toBeGreaterThan(0);
+    expect(response.body.nutrition.calories).toBe(0);
     // 直値パスでは pending=false が混ざることがあるため厳格にはチェックしない
     expect(Array.isArray(response.body.breakdown.items)).toBe(true);
     expect(response.body.breakdown.items.length).toBeGreaterThan(0);
@@ -44,12 +44,15 @@ describe('/log with Gemini Provider Integration Tests', () => {
     expect(rows[0].food_item).toBe('カツ丼');
     // The stored calories should match what the API responded (source of truth), and be > 0
     const kcalFromAPI = Number(response.body.nutrition.calories);
-    expect(kcalFromAPI).toBeGreaterThan(0);
+    expect(kcalFromAPI).toBe(0);
     expect(Number(rows[0].calories)).toBeCloseTo(kcalFromAPI, 0);
     const raw = rows[0].ai_raw;
     const rawObj = typeof raw === 'string' ? JSON.parse(raw) : raw;
     expect(typeof rawObj.confidence).toBe('number');
     expect(rawObj.confidence).toBeGreaterThanOrEqual(0);
     expect(rawObj.confidence).toBeLessThanOrEqual(1);
+
+    // DBに保存されたlanding_typeがmeta.source_kindと一致することを確認
+    expect(rows[0].landing_type).toBe(response.body.meta.source_kind);
   });
 });

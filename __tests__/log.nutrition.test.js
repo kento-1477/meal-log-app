@@ -79,7 +79,8 @@ describe('/log with nutrition', () => {
     const res = await request(app)
       .post('/log')
       .field('user_id', userId)
-      .field('text', 'とんかつ定食'); // Provide text for analyze to use
+      .field('text', 'とんかつ定食') // Provide text for analyze to use
+      .attach('image', Buffer.from('fake-img'), 'fake.jpg');
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
