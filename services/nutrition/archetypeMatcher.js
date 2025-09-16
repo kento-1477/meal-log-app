@@ -36,6 +36,7 @@ function findArchetype(text) {
       name: code, // Placeholder, should be resolved later
       qty_g,
       pending: true, // All items from an archetype are initially pending
+      include: true, // Ensure it's included in calculations
     }));
 
     return {

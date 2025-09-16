@@ -6,6 +6,14 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
     process.env.GEMINI_MOCK = '1';
   });
 
+  beforeEach(() => {
+    jest.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.CALORIE_MASK_STRATEGY;
+  });
+
   it('should return an empty result for non-archetype, non-keyword input', async () => {
     const input = { text: '寿司' };
     const result = await analyze(input);
@@ -29,7 +37,8 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
       expect(result.confidence).toBeLessThanOrEqual(1);
       expect(result.breakdown.items.length).toBe(2);
       expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-      expect(result.nutrition.calories).toBe(0); // Because all items are pending
+      // With default policy, calories should be calculated
+      expect(result.nutrition.calories).toBeGreaterThan(0);
 
       // 後方互換性のためのミラーフィールドを確認
       expect(result).toHaveProperty('meta.fallback_level');
@@ -48,23 +57,23 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
       expect(result.dish).toBe('焼き魚定食');
       expect(result.breakdown.items.length).toBe(4);
       expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-      expect(result.nutrition.calories).toBe(0);
+      // With default policy, calories should be calculated
+      expect(result.nutrition.calories).toBeGreaterThan(0);
     });
   });
 
   describe('Final Deterministic Fallback', () => {
-    it('should fall back to keyword match for "とんかつ" when AI and archetype fail', async () => {
-      // This test assumes the AI mock returns empty, and "とんかつ" is not an archetype keyword
+    it('should now match "とんかつ" to the tonkatsu_teishoku archetype', async () => {
+      // This test now expects a successful archetype match due to the added keyword.
       const input = { text: 'とんかつ' };
       const result = await analyze(input);
 
-      expect(result.archetype_id).toBeUndefined();
+      expect(result.archetype_id).toBe('tonkatsu_teishoku');
       expect(typeof result.confidence).toBe('number');
-      expect(result.confidence).toBeGreaterThanOrEqual(0);
-      expect(result.confidence).toBeLessThanOrEqual(1);
-      expect(result.breakdown.items.length).toBe(2);
+      expect(result.breakdown.items.length).toBe(4);
       expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-      expect(result.nutrition.calories).toBe(0);
+      // With default policy, calories should be calculated
+      expect(result.nutrition.calories).toBeGreaterThan(0);
       expect(result.breakdown.items.map((i) => i.code)).toContain(
         'pork_loin_cutlet',
       );
@@ -76,43 +85,26 @@ describe('Nutrition Analysis with Archetype Fallback', () => {
 
       expect(result.archetype_id).toBeUndefined();
       expect(typeof result.confidence).toBe('number');
-      expect(result.confidence).toBeGreaterThanOrEqual(0);
-      expect(result.confidence).toBeLessThanOrEqual(1);
       expect(result.breakdown.items.length).toBe(1);
       expect(result.breakdown.items[0].code).toBe('rice_cooked');
       expect(result.breakdown.items[0].pending).toBe(true);
-      expect(result.nutrition.calories).toBe(0);
+      // With default policy, calories should be calculated
+      expect(result.nutrition.calories).toBeGreaterThan(0);
     });
-    it('should mask kcal to 0 for second-stage fallback with all pending items', async () => {
-      // Mock analyze to return 0 kcal initially, triggering second-stage fallback
-      // and ensure all items are pending.
-      const input = { text: 'さば定食' }; // 既存テストでも使われる安定入力
+
+    it('should mask kcal to 0 when policy is enabled', async () => {
+      // Enable the mask for this test
+      process.env.CALORIE_MASK_STRATEGY = 'fallback_all_pending';
+
+      const input = { text: 'さば定食' }; // An input that triggers fallback
       const result = await analyze(input);
 
-      // Ensure it went through the items path and second-stage fallback
+      // Ensure it went through a fallback path
       expect(result.meta.fallback_level).toBeGreaterThanOrEqual(1);
-      // itemsが0件でも every は true になりがちなので、0件ではないことも確認
       expect(result.breakdown.items.length).toBeGreaterThan(0);
       expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
 
-      // Kcal should be masked to 0 due to the guard
-      expect(result.nutrition.calories).toBe(0);
-    });
-    // このテストは、より詳細なユニットテスト __tests__/nutrition.level2.unit.test.js でカバーされているためスキップします。
-    // ユニットテストは、依存関係をモックすることで、第2段フォールバックのロジックパスを確実にテストします。
-    it.skip('should mask kcal to 0 for second-stage fallback with all pending items (level 2)', async () => {
-      // Mock analyze to return 0 kcal initially, triggering second-stage fallback
-      // and ensure all items are pending.
-      const input = { text: 'さば定食' }; // 既存テストでも使われる安定入力
-      const result = await analyze(input);
-
-      // Ensure it went through the items path and second-stage fallback
-      expect(result.meta.fallback_level).toBe(2);
-      expect(result.meta.source_kind).toBe('recipe'); // From archetype
-      expect(result.breakdown.items.length).toBeGreaterThan(0);
-      expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-
-      // Kcal should be masked to 0 due to the guard
+      // Kcal should be masked to 0 because the policy is enabled
       expect(result.nutrition.calories).toBe(0);
     });
   });

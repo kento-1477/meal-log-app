@@ -105,8 +105,9 @@ async function analyze(input) {
     aiResult &&
     (!Array.isArray(aiResult.items) ||
       aiResult.items.length === 0 ||
-      needsTemplateFallback(aiResult.items))
+      needsTemplateFallback(aiResult.items)) // ← “全部 g=0”もここに入る
   ) {
+    // 1) まずアーキタイプ
     const archetypeResult = findArchetype(input.text);
     if (archetypeResult) {
       console.debug(
@@ -123,45 +124,44 @@ async function analyze(input) {
           archetype_id: archetypeResult.archetype_id,
         }),
       };
+    } else {
+      // 2) 当たらなければキーワード既定（必ずここに落ちる）
+      const text = input.text || '';
+      let items = [];
+      if (/カツ丼|とんかつ|トンカツ/i.test(text)) {
+        items = [
+          {
+            code: 'pork_loin_cutlet',
+            qty_g: 120,
+            include: true,
+            pending: true,
+          },
+          { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
+        ];
+      } else if (/ハンバーグ/i.test(text)) {
+        items = [
+          { code: 'hamburger_steak', qty_g: 150, include: true, pending: true },
+          { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
+        ];
+      } else if (/カレー|カレーライス/i.test(text)) {
+        items = [
+          { code: 'curry_rice', qty_g: 300, include: true, pending: true },
+        ];
+      } else if (/(定食|teishoku)/i.test(text)) {
+        items = [
+          { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
+        ];
+      }
+      if (items.length) {
+        console.debug('[nutrition] fallback=keyword');
+        aiResult = {
+          dish: text,
+          confidence: 0,
+          items,
+          meta: makeMeta({ source_kind: 'keyword', fallback_level: 1 }),
+        };
+      }
     }
-  }
-
-  // If still no items, try the final deterministic keyword fallback
-  if (aiResult && aiResult.items && aiResult.items.length === 0) {
-    console.log('Falling back to deterministic keywords.');
-    const text = input.text || '';
-    let items = [];
-    // This is a deterministic fallback for when AI analysis fails.
-    // All items created here are unconfirmed and should be marked as pending.
-    if (/カツ丼|とんかつ|トンカツ/i.test(text)) {
-      items = [
-        { code: 'pork_loin_cutlet', qty_g: 120, include: true, pending: true },
-        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
-      ];
-    } else if (/ハンバーグ/i.test(text)) {
-      items = [
-        { code: 'hamburger_steak', qty_g: 150, include: true, pending: true },
-        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
-      ];
-    } else if (/カレー|カレーライス/i.test(text)) {
-      items = [
-        { code: 'curry_rice', qty_g: 300, include: true, pending: true },
-      ];
-    }
-
-    // Fallback for "Teishoku" (set meal) to add pending rice
-    if (items.length === 0 && /(定食|teishoku)/i.test(text)) {
-      items = [
-        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
-      ];
-    }
-    // Overwrite aiResult with fallback results
-    aiResult = {
-      dish: text || '食事',
-      confidence: 0,
-      items,
-      meta: makeMeta({ source_kind: 'keyword', fallback_level: 1 }),
-    };
   }
 
   const hasDirectRoot =
@@ -258,19 +258,30 @@ async function analyze(input) {
     aiResult.confidence = 0;
   }
 
-  // ★ ここから追加: フォールバック + 全pending の時は kcal を隠す（0に丸める）
+  const { POLICY } = require('./policy.js');
+  // ★ フォールバック + 全pending かつ policy が許可した時だけ 0 に丸める
   const allPending =
     resolvedItems.length > 0 && resolvedItems.every((i) => i.pending);
   const isFallback =
     (aiResult.meta?.fallback_level ??
       deriveMetaFromLegacy(aiResult).fallback_level) >= 1;
 
-  if (isFallback && allPending) {
+  if (
+    POLICY.calorieMaskStrategy === 'fallback_all_pending' &&
+    isFallback &&
+    allPending
+  ) {
     // 影響を最小化するため calories だけ 0 にします（P/F/C はそのまま）
     kcal = 0;
     // デバッグが欲しければ:
     // console.debug('[nutrition] kcal masked because fallback+allPending');
   }
+
+  const finalMeta = aiResult.meta || deriveMetaFromLegacy(aiResult);
+  console.debug('[fallback]', {
+    used: finalMeta.source_kind || 'none',
+    dish: aiResult.dish,
+  });
 
   return {
     dish: aiResult.dish,
@@ -284,10 +295,10 @@ async function analyze(input) {
       slots,
       warnings: warnings,
     },
-    meta: aiResult.meta || deriveMetaFromLegacy(aiResult),
+    meta: finalMeta,
     // 互換: 旧クライアント向けに残す（将来削除のTODO付け推奨）
     landing_type: aiResult.landing_type,
-    archetype_id: aiResult.meta?.archetype_id ?? aiResult.archetype_id,
+    archetype_id: finalMeta.archetype_id ?? aiResult.archetype_id,
   };
 }
 

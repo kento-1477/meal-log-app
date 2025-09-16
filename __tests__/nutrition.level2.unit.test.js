@@ -19,6 +19,7 @@ describe('fallback level 2 (unit, mocked path)', () => {
   });
 
   it('forces second-stage fallback and asserts fallback_level === 2', async () => {
+    process.env.CALORIE_MASK_STRATEGY = 'fallback_all_pending';
     // 1) 依存をモック
     // computeFromItems: 1回目=0kcal, 2回目=テンプレ値（itemsはpending=true維持）
     const computeMod = require(pathCompute);

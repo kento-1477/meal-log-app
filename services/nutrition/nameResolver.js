@@ -69,7 +69,7 @@ const ALIAS = {
 function canon(nameOrCode = '') {
   const k = _norm(nameOrCode);
   // Special case for とんかつ variants not covered by simple norm
-  if (/とんかつ|豚カツ|カツ|cutlet|ヒレ|フィレ|ロース/i.test(nameOrCode)) {
+  if (/とんかつ|豚カツ|カツ\b|cutlet|ヒレ|フィレ/i.test(nameOrCode)) {
     return 'とんかつ';
   }
   return ALIAS[k] || nameOrCode; // Fallback to the original if no alias found

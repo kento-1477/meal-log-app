@@ -2,33 +2,25 @@ const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db.js');
 const { createTestUser } = require('../tests/utils/createTestUser.js');
-
-// Mock the correct provider now used by the /log route
-jest.mock('../services/nutrition/providers/geminiProvider', () => ({
-  analyze: jest.fn(async () => ({
-    dish: 'モックされた料理',
-    confidence: 0.8,
-    items: [
-      { code: 'rice_cooked', qty_g: 250, include: true },
-      { code: 'chicken_breast_cooked', qty_g: 150, include: true },
-    ],
-  })),
-  analyzeText: jest.fn(), // Keep for other tests if they use it
-}));
-
-// Import the mocked function to check calls
-const { analyze } = require('../services/nutrition/providers/geminiProvider');
+const geminiProvider = require('../services/nutrition/providers/geminiProvider');
 
 describe('/log with nutrition', () => {
   let userId;
+  let analyzeSpy;
 
   beforeEach(async () => {
     await pool.query(
       'TRUNCATE TABLE users, meal_logs RESTART IDENTITY CASCADE',
     );
     userId = await createTestUser();
-    // Clear mock calls before each test
-    analyze.mockClear();
+    // Spy on the real module's method
+    analyzeSpy = jest.spyOn(geminiProvider, 'analyze');
+  });
+
+  afterEach(() => {
+    // Restore original implementation and reset modules to ensure clean state
+    analyzeSpy.mockRestore();
+    jest.resetModules();
   });
 
   afterAll(async () => {
@@ -36,6 +28,17 @@ describe('/log with nutrition', () => {
   });
 
   it('should insert meal, analyze nutrition, update row and respond with nutrition', async () => {
+    // Provide a mock implementation for this specific test
+    analyzeSpy.mockResolvedValue({
+      dish: 'スパイされた料理',
+      confidence: 0.8,
+      meta: { source_kind: 'ai', fallback_level: 0 },
+      items: [
+        { code: 'rice_cooked', qty_g: 250, include: true },
+        { code: 'chicken_breast_cooked', qty_g: 150, include: true },
+      ],
+    });
+
     const res = await request(app)
       .post('/log')
       .field('user_id', userId)
@@ -45,12 +48,11 @@ describe('/log with nutrition', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.logId).toBeDefined();
 
-    // The response now contains the computed breakdown, so we check the final computed values
-    expect(res.body.nutrition.calories).toBeDefined();
+    expect(res.body.nutrition.calories).toBeGreaterThan(0);
     expect(res.body.nutrition.protein_g).toBeDefined();
 
-    // Check that our mock was called correctly
-    expect(analyze).toHaveBeenCalledWith({
+    // Check that our spy was called correctly
+    expect(analyzeSpy).toHaveBeenCalledWith({
       text: '',
       imageBuffer: expect.any(Buffer),
       mime: 'image/jpeg',
@@ -61,20 +63,20 @@ describe('/log with nutrition', () => {
       [res.body.logId],
     );
     const r = rows[0];
-    expect(r.calories).toEqual(expect.any(String));
-    expect(r.protein_g).toEqual(expect.any(String));
+    expect(Number(r.calories)).toBeGreaterThan(0);
+    expect(Number(r.protein_g)).toBeGreaterThan(0);
   });
 
   it('should map english codes to JP reps and sum kcal correctly', async () => {
-    // Mock Gemini to return English codes for tonkatsu and rice
-    analyze.mockImplementationOnce(async () => ({
+    // Mock the return value for this specific test
+    analyzeSpy.mockResolvedValue({
       dish: 'とんかつ定食',
       confidence: 0.9,
       items: [
         { code: 'pork_loin_cutlet', qty_g: 120, include: true },
         { code: 'rice_cooked', qty_g: 200, include: true },
       ],
-    }));
+    });
 
     const res = await request(app)
       .post('/log')

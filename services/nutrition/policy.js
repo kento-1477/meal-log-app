@@ -4,6 +4,8 @@ const POLICY = {
   oilAbsorption: { min: 0.05, mid: 0.1, max: 0.15 },
   priority: ['label', 'db', 'category', 'rule', 'template'],
   synonymsVersion: '2025-09-14',
+  calorieMaskStrategy: process.env.CALORIE_MASK_STRATEGY || 'never',
+  // 'never' | 'fallback_all_pending'
 };
 
 function roundPF(x) {
