@@ -4,14 +4,26 @@ const { buildSlots } = require('./slots');
 const { findArchetype } = require('./archetypeMatcher');
 const { resolveNames } = require('./nameResolver');
 const { finalizeTotals } = require('./policy.js');
+const { makeMeta, deriveMetaFromLegacy } = require('./meta');
+
+/**
+ * Checks if at least one item in the array has a usable gram value.
+ * Mirrors the logic of getGrams() in computeFromItems.js for consistency.
+ */
+function hasUsableGrams(items = []) {
+  if (!Array.isArray(items)) return false;
+  return items.some((it) => {
+    const raw =
+      it?.grams ?? it?.qty_g ?? it?.quantity_g ?? it?.g ?? it?.amount ?? 0;
+    const n = Number(String(raw).replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) && n > 0;
+  });
+}
 
 /** gramsが1つも確定していない配列なら true */
 function needsTemplateFallback(items) {
   if (!Array.isArray(items) || items.length === 0) return false;
-  return !items.some((it) => {
-    const g = Number(it?.grams);
-    return Number.isFinite(g) && g > 0;
-  });
+  return !hasUsableGrams(items);
 }
 
 async function realAnalyze(input) {
@@ -40,14 +52,14 @@ async function analyze(input) {
   let aiResult;
   try {
     aiResult = await realAnalyze(input);
-    aiResult.landing_type = aiResult.landing_type || 'ai_exact';
+    aiResult.meta = makeMeta({ source_kind: 'ai', fallback_level: 0 });
   } catch (_error) {
     // If AI provider itself fails, set a default empty structure
     aiResult = {
       dish: input.text || '食事',
       confidence: 0,
       items: [],
-      landing_type: 'ai_error',
+      meta: makeMeta({ source_kind: 'ai', fallback_level: 0, error: true }),
     };
   }
 
@@ -105,7 +117,11 @@ async function analyze(input) {
         ...aiResult,
         ...archetypeResult,
         items: archetypeResult.items, // 既定量つきに置換
-        landing_type: 'template_fallback',
+        meta: makeMeta({
+          source_kind: 'recipe',
+          fallback_level: 1,
+          archetype_id: archetypeResult.archetype_id,
+        }),
       };
     }
   }
@@ -144,25 +160,40 @@ async function analyze(input) {
       dish: text || '食事',
       confidence: 0,
       items,
-      landing_type: 'fallback_keyword',
+      meta: makeMeta({ source_kind: 'keyword', fallback_level: 1 }),
     };
   }
 
-  const hasDirect =
+  const hasDirectRoot =
     aiResult &&
     ['calories', 'protein_g', 'fat_g', 'carbs_g'].some(
       (k) => Number(aiResult?.[k]) > 0,
     );
-  if (hasDirect) {
-    console.debug('[nutrition] path=direct');
-    const slots = buildSlots(aiResult.items ?? []);
+  const hasDirectNested =
+    aiResult?.nutrition &&
+    ['calories', 'protein_g', 'fat_g', 'carbs_g'].some(
+      (k) => Number(aiResult?.nutrition?.[k]) > 0,
+    );
+  if (hasDirectRoot || hasDirectNested) {
+    console.debug(
+      '[nutrition] path=direct%s',
+      hasDirectNested ? '(nested)' : '',
+    );
+    const p = Number(
+      aiResult?.protein_g ?? aiResult?.nutrition?.protein_g ?? 0,
+    );
+    const f = Number(aiResult?.fat_g ?? aiResult?.nutrition?.fat_g ?? 0);
+    const c = Number(aiResult?.carbs_g ?? aiResult?.nutrition?.carbs_g ?? 0);
+    const kcal = Number(
+      aiResult?.calories ?? aiResult?.nutrition?.calories ?? 0,
+    );
+    const slots = buildSlots(aiResult.items ?? [], aiResult.meta?.archetype_id);
     const { total, atwater, range } = finalizeTotals({
-      P: aiResult.protein_g ?? 0,
-      F: aiResult.fat_g ?? 0,
-      C: aiResult.carbs_g ?? 0,
-      kcal: aiResult.calories ?? 0,
+      P: p,
+      F: f,
+      C: c,
+      kcal,
     });
-
     return {
       dish: aiResult.dish,
       confidence: aiResult.confidence ?? 0.6,
@@ -210,9 +241,15 @@ async function analyze(input) {
       (warnings ||= []).push(
         'AIの分量が不明だったため既定レシピで推定しました',
       );
+      // ★ 第2段フォールバックでも fallback 扱いだと明示する（丸めガードを発火させる）
+      aiResult.meta = makeMeta({
+        source_kind: 'recipe',
+        fallback_level: 2,
+        archetype_id: arch2.archetype_id,
+      });
     }
   }
-  const slots = buildSlots(normItems, aiResult.archetype_id);
+  const slots = buildSlots(normItems, aiResult.meta?.archetype_id);
   const resolvedItems = resolveNames(normItems);
 
   aiResult.base_confidence = aiResult.base_confidence ?? aiResult.confidence;
@@ -221,12 +258,24 @@ async function analyze(input) {
     aiResult.confidence = 0;
   }
 
+  // ★ ここから追加: フォールバック + 全pending の時は kcal を隠す（0に丸める）
+  const allPending =
+    resolvedItems.length > 0 && resolvedItems.every((i) => i.pending);
+  const isFallback =
+    (aiResult.meta?.fallback_level ??
+      deriveMetaFromLegacy(aiResult).fallback_level) >= 1;
+
+  if (isFallback && allPending) {
+    // 影響を最小化するため calories だけ 0 にします（P/F/C はそのまま）
+    kcal = 0;
+    // デバッグが欲しければ:
+    // console.debug('[nutrition] kcal masked because fallback+allPending');
+  }
+
   return {
     dish: aiResult.dish,
     confidence: aiResult.confidence,
     base_confidence: aiResult.base_confidence, // Add base_confidence here
-    archetype_id: aiResult.archetype_id, // Pass through the archetype_id if it exists
-    landing_type: aiResult.landing_type, // Pass through the landing_type
     nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
     atwater,
     range,
@@ -235,6 +284,10 @@ async function analyze(input) {
       slots,
       warnings: warnings,
     },
+    meta: aiResult.meta || deriveMetaFromLegacy(aiResult),
+    // 互換: 旧クライアント向けに残す（将来削除のTODO付け推奨）
+    landing_type: aiResult.landing_type,
+    archetype_id: aiResult.meta?.archetype_id ?? aiResult.archetype_id,
   };
 }
 

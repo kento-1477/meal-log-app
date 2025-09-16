@@ -362,48 +362,17 @@ app.post(
       });
 
       // PATCH_LOG_GUARD_START
-      const items = Array.isArray(analysisResult?.breakdown?.items)
-        ? analysisResult.breakdown.items
-        : [];
-      console.debug(
-        '[nutrition] aiNut=',
-        analysisResult?.nutrition,
-        'itemsLen=',
-        items.length,
-      );
-      const aiNut = analysisResult?.nutrition;
-      const hasAIDirect =
-        aiNut &&
-        [aiNut.calories, aiNut.protein_g, aiNut.fat_g, aiNut.carbs_g].some(
-          (v) => Number(v) > 0,
-        );
-      let nutritionGuarded;
-      if (hasAIDirect) {
-        // AIが出せた数値を最優先
-        nutritionGuarded = aiNut;
-      } else {
-        // 出せない時だけ items から再計算（揚げ物などに備えて dish 名も渡す）
-        let agg = { P: 0, F: 0, C: 0, kcal: 0 };
-        try {
-          agg = computeFromItems(items, analysisResult?.dish);
-        } catch {
-          /* empty */
-        }
-        nutritionGuarded = {
-          protein_g: agg.P,
-          fat_g: agg.F,
-          carbs_g: agg.C,
-          calories: agg.kcal,
-        };
-      }
-
+      // The analyze() function now handles all nutrition calculation and fallbacks.
+      // We can directly use its output.
       const finalAnalysisResult = {
         ...(analysisResult || {}),
-        breakdown: {
-          ...((analysisResult && analysisResult.breakdown) || {}),
-          items,
-        },
-        nutrition: nutritionGuarded,
+        breakdown: analysisResult?.breakdown || {}, // Ensure breakdown is always present
+        nutrition: analysisResult?.nutrition || {
+          protein_g: 0,
+          fat_g: 0,
+          carbs_g: 0,
+          calories: 0,
+        }, // Ensure nutrition is always present
       };
       // PATCH_LOG_GUARD_END
 
@@ -433,10 +402,7 @@ app.post(
         );
         imageId = mediaRows[0].id;
       }
-      const landing_type =
-        analysisResult?.landing_type ??
-        (analysisResult?.provider ||
-          (analysisResult?.archetype_id ? 'archetype' : 'deterministic'));
+      const landing_type = finalAnalysisResult.meta.source_kind;
 
       const { rows } = await pool.query(
         `INSERT INTO meal_logs
@@ -465,6 +431,8 @@ app.post(
         confidence: finalAnalysisResult.confidence,
         nutrition: finalAnalysisResult.nutrition,
         breakdown: finalAnalysisResult.breakdown,
+        meta: finalAnalysisResult.meta,
+        landing_type: finalAnalysisResult.meta.source_kind, // for backward compatibility
       });
       const volatileOn = process.env.ENABLE_VOLATILE_SLOTS === '1';
       if (volatileOn) {
