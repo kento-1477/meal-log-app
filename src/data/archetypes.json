@@ -69,7 +69,12 @@
     {
       "id": "tonkatsu_teishoku",
       "name": "とんかつ定食",
-      "keywords": ["とんかつ定食", "トンカツ定食", "tonkatsu teishoku"],
+      "keywords": [
+        "とんかつ定食",
+        "トンカツ定食",
+        "tonkatsu teishoku",
+        "とんかつ"
+      ],
       "portions": {
         "regular": {
           "rice_cooked": 200,

@@ -109,59 +109,42 @@ async function analyze(input) {
   ) {
     const archetypeResult = findArchetype(input.text);
     if (archetypeResult) {
-      console.debug(
-        '[nutrition] fallback=archetype',
-        archetypeResult.archetype_id,
-      );
+      const originalConfidence = aiResult.confidence; // Store original confidence
       aiResult = {
-        ...aiResult,
-        ...archetypeResult,
-        items: archetypeResult.items, // 既定量つきに置換
+        ...archetypeResult, // Base from archetype
+        items: archetypeResult.items, // Ensure archetype's items are used
+        confidence: originalConfidence, // Explicitly set original confidence
+        ...aiResult, // Overlay original AI result (meta はここで上書きされる)
         meta: makeMeta({
-          source_kind: 'recipe',
+          // 最後に meta を設定
+          source_kind: 'template',
           fallback_level: 1,
           archetype_id: archetypeResult.archetype_id,
         }),
       };
+    } else {
+      const text = input.text || '';
+      let items = [];
+      if (/(定食|teishoku)/i.test(text)) {
+        items = [
+          { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
+        ];
+      }
+      if (items.length) {
+        aiResult = {
+          dish: text,
+          confidence: aiResult.confidence ?? 0.6,
+          items,
+          meta: makeMeta({ source_kind: 'template', fallback_level: 1 }),
+        };
+      } else {
+        aiResult = {
+          ...aiResult,
+          items: [],
+          meta: makeMeta({ source_kind: 'ai', fallback_level: 0 }),
+        };
+      }
     }
-  }
-
-  // If still no items, try the final deterministic keyword fallback
-  if (aiResult && aiResult.items && aiResult.items.length === 0) {
-    console.log('Falling back to deterministic keywords.');
-    const text = input.text || '';
-    let items = [];
-    // This is a deterministic fallback for when AI analysis fails.
-    // All items created here are unconfirmed and should be marked as pending.
-    if (/カツ丼|とんかつ|トンカツ/i.test(text)) {
-      items = [
-        { code: 'pork_loin_cutlet', qty_g: 120, include: true, pending: true },
-        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
-      ];
-    } else if (/ハンバーグ/i.test(text)) {
-      items = [
-        { code: 'hamburger_steak', qty_g: 150, include: true, pending: true },
-        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
-      ];
-    } else if (/カレー|カレーライス/i.test(text)) {
-      items = [
-        { code: 'curry_rice', qty_g: 300, include: true, pending: true },
-      ];
-    }
-
-    // Fallback for "Teishoku" (set meal) to add pending rice
-    if (items.length === 0 && /(定食|teishoku)/i.test(text)) {
-      items = [
-        { code: 'rice_cooked', qty_g: 200, include: true, pending: true },
-      ];
-    }
-    // Overwrite aiResult with fallback results
-    aiResult = {
-      dish: text || '食事',
-      confidence: 0,
-      items,
-      meta: makeMeta({ source_kind: 'keyword', fallback_level: 1 }),
-    };
   }
 
   const hasDirectRoot =
@@ -174,11 +157,9 @@ async function analyze(input) {
     ['calories', 'protein_g', 'fat_g', 'carbs_g'].some(
       (k) => Number(aiResult?.nutrition?.[k]) > 0,
     );
-  if (hasDirectRoot || hasDirectNested) {
-    console.debug(
-      '[nutrition] path=direct%s',
-      hasDirectNested ? '(nested)' : '',
-    );
+  const path = hasDirectRoot || hasDirectNested ? 'ai/direct' : 'item/template';
+
+  if (path === 'ai/direct') {
     const p = Number(
       aiResult?.protein_g ?? aiResult?.nutrition?.protein_g ?? 0,
     );
@@ -194,6 +175,16 @@ async function analyze(input) {
       C: c,
       kcal,
     });
+
+    const finalMeta = aiResult.meta || deriveMetaFromLegacy(aiResult);
+    const atwater_delta =
+      atwater && Number.isFinite(atwater.delta) ? atwater.delta : 0;
+    console.log('[nutrition]', {
+      path,
+      fallback_used: (finalMeta.fallback_level ?? 0) > 0,
+      atwater_delta,
+    });
+
     return {
       dish: aiResult.dish,
       confidence: aiResult.confidence ?? 0.6,
@@ -210,10 +201,11 @@ async function analyze(input) {
         slots,
         warnings: aiResult.warnings ?? [],
       },
+      meta: finalMeta,
     };
   }
 
-  console.debug('[nutrition] path=items');
+  // Path: item/template
   let {
     P,
     F,
@@ -241,41 +233,36 @@ async function analyze(input) {
       (warnings ||= []).push(
         'AIの分量が不明だったため既定レシピで推定しました',
       );
-      // ★ 第2段フォールバックでも fallback 扱いだと明示する（丸めガードを発火させる）
       aiResult.meta = makeMeta({
-        source_kind: 'recipe',
-        fallback_level: 2,
+        source_kind: 'template',
+        fallback_level: 1,
         archetype_id: arch2.archetype_id,
       });
     }
   }
+
   const slots = buildSlots(normItems, aiResult.meta?.archetype_id);
   const resolvedItems = resolveNames(normItems);
-
   aiResult.base_confidence = aiResult.base_confidence ?? aiResult.confidence;
-  // If any items are pending, the overall confidence must be 0.
-  if (resolvedItems.some((i) => i.pending)) {
-    aiResult.confidence = 0;
-  }
+  // 最終防御：0 や undefined を返さない
+  const isNum = (v) => Number.isFinite(v);
+  const finalConfidence = isNum(aiResult.confidence)
+    ? aiResult.confidence
+    : isNum(aiResult.base_confidence)
+      ? aiResult.base_confidence
+      : 0.6;
 
-  // ★ ここから追加: フォールバック + 全pending の時は kcal を隠す（0に丸める）
-  const allPending =
-    resolvedItems.length > 0 && resolvedItems.every((i) => i.pending);
-  const isFallback =
-    (aiResult.meta?.fallback_level ??
-      deriveMetaFromLegacy(aiResult).fallback_level) >= 1;
-
-  if (isFallback && allPending) {
-    // 影響を最小化するため calories だけ 0 にします（P/F/C はそのまま）
-    kcal = 0;
-    // デバッグが欲しければ:
-    // console.debug('[nutrition] kcal masked because fallback+allPending');
-  }
+  const finalMeta = aiResult.meta || deriveMetaFromLegacy(aiResult);
+  console.log('[nutrition]', {
+    path,
+    fallback_used: (finalMeta.fallback_level ?? 0) > 0,
+    atwater_delta: atwater?.delta,
+  });
 
   return {
     dish: aiResult.dish,
-    confidence: aiResult.confidence,
-    base_confidence: aiResult.base_confidence, // Add base_confidence here
+    confidence: finalConfidence,
+    base_confidence: aiResult.base_confidence,
     nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
     atwater,
     range,
@@ -284,10 +271,7 @@ async function analyze(input) {
       slots,
       warnings: warnings,
     },
-    meta: aiResult.meta || deriveMetaFromLegacy(aiResult),
-    // 互換: 旧クライアント向けに残す（将来削除のTODO付け推奨）
-    landing_type: aiResult.landing_type,
-    archetype_id: aiResult.meta?.archetype_id ?? aiResult.archetype_id,
+    meta: finalMeta,
   };
 }
 

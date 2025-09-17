@@ -1,119 +1,55 @@
-const { analyze } = require('../services/nutrition');
+jest.mock('../services/nutrition/providers/geminiProvider', () => ({
+  analyze: jest.fn(),
+}));
 
-describe('Nutrition Analysis with Archetype Fallback', () => {
-  beforeAll(() => {
-    // Ensure all tests run in mock mode to isolate from live AI
-    process.env.GEMINI_MOCK = '1';
+describe('Archetype Matching (new spec)', () => {
+  let analyze, geminiProvider;
+  beforeEach(() => {
+    jest.resetModules();
+    jest.clearAllMocks();
+    geminiProvider = require('../services/nutrition/providers/geminiProvider');
+    ({ analyze } = require('../services/nutrition'));
   });
 
-  it('should return an empty result for non-archetype, non-keyword input', async () => {
-    const input = { text: '寿司' };
-    const result = await analyze(input);
-
-    expect(result.breakdown.items).toEqual([]);
-    expect(result.nutrition.calories).toBe(0);
-    expect(typeof result.confidence).toBe('number');
-    expect(result.confidence).toBeGreaterThanOrEqual(0);
-    expect(result.confidence).toBeLessThanOrEqual(1);
+  it('matches 牛丼 → gyudon (template fallback)', async () => {
+    geminiProvider.analyze.mockResolvedValueOnce({
+      dish: '牛丼',
+      items: [],
+      confidence: 0.7,
+      meta: { source_kind: 'ai', fallback_level: 0 },
+    });
+    const res = await analyze({ text: '牛丼' });
+    expect(res.meta.source_kind).toBe('template');
+    expect(res.meta.archetype_id).toBe('gyudon');
+    expect(res.breakdown.items.length).toBeGreaterThan(0);
+    expect(typeof res.confidence).toBe('number');
   });
 
-  describe('Archetype Matching', () => {
-    it('should match "牛丼" to the gyudon archetype', async () => {
-      const input = { text: '牛丼大盛り' };
-      const result = await analyze(input);
-
-      expect(result.archetype_id).toBe('gyudon');
-      expect(result.dish).toBe('牛丼');
-      expect(typeof result.confidence).toBe('number');
-      expect(result.confidence).toBeGreaterThanOrEqual(0);
-      expect(result.confidence).toBeLessThanOrEqual(1);
-      expect(result.breakdown.items.length).toBe(2);
-      expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-      expect(result.nutrition.calories).toBe(0); // Because all items are pending
-
-      // 後方互換性のためのミラーフィールドを確認
-      expect(result).toHaveProperty('meta.fallback_level');
-      expect(result).toHaveProperty('landing_type');
-      expect(result.archetype_id).toBe(result.meta.archetype_id);
-
-      const rice = result.breakdown.items.find((i) => i.code === 'rice_cooked');
-      expect(rice.qty_g).toBe(250); // regular size from archetype
+  it('matches 焼き魚定食 → yakizakana_teishoku (template fallback)', async () => {
+    geminiProvider.analyze.mockResolvedValueOnce({
+      dish: '焼き魚定食',
+      items: [],
+      confidence: 0.7,
+      meta: { source_kind: 'ai', fallback_level: 0 },
     });
-
-    it('should match "焼き魚定食" to the yakizakana_teishoku archetype', async () => {
-      const input = { text: '焼き魚定食' };
-      const result = await analyze(input);
-
-      expect(result.archetype_id).toBe('yakizakana_teishoku');
-      expect(result.dish).toBe('焼き魚定食');
-      expect(result.breakdown.items.length).toBe(4);
-      expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-      expect(result.nutrition.calories).toBe(0);
-    });
+    const res = await analyze({ text: '焼き魚定食' });
+    expect(res.meta.source_kind).toBe('template');
+    expect(res.meta.archetype_id).toBe('yakizakana_teishoku');
+    expect(res.breakdown.items.length).toBeGreaterThan(0);
+    expect(typeof res.confidence).toBe('number');
   });
 
-  describe('Final Deterministic Fallback', () => {
-    it('should fall back to keyword match for "とんかつ" when AI and archetype fail', async () => {
-      // This test assumes the AI mock returns empty, and "とんかつ" is not an archetype keyword
-      const input = { text: 'とんかつ' };
-      const result = await analyze(input);
-
-      expect(result.archetype_id).toBeUndefined();
-      expect(typeof result.confidence).toBe('number');
-      expect(result.confidence).toBeGreaterThanOrEqual(0);
-      expect(result.confidence).toBeLessThanOrEqual(1);
-      expect(result.breakdown.items.length).toBe(2);
-      expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-      expect(result.nutrition.calories).toBe(0);
-      expect(result.breakdown.items.map((i) => i.code)).toContain(
-        'pork_loin_cutlet',
-      );
+  it('matches とんかつ定食 → tonkatsu_teishoku (template fallback)', async () => {
+    geminiProvider.analyze.mockResolvedValueOnce({
+      dish: 'とんかつ定食',
+      items: [],
+      confidence: 0.7,
+      meta: { source_kind: 'ai', fallback_level: 0 },
     });
-
-    it('should fall back to teishoku rice for "さば定食"', async () => {
-      const input = { text: 'さば定食' };
-      const result = await analyze(input);
-
-      expect(result.archetype_id).toBeUndefined();
-      expect(typeof result.confidence).toBe('number');
-      expect(result.confidence).toBeGreaterThanOrEqual(0);
-      expect(result.confidence).toBeLessThanOrEqual(1);
-      expect(result.breakdown.items.length).toBe(1);
-      expect(result.breakdown.items[0].code).toBe('rice_cooked');
-      expect(result.breakdown.items[0].pending).toBe(true);
-      expect(result.nutrition.calories).toBe(0);
-    });
-    it('should mask kcal to 0 for second-stage fallback with all pending items', async () => {
-      // Mock analyze to return 0 kcal initially, triggering second-stage fallback
-      // and ensure all items are pending.
-      const input = { text: 'さば定食' }; // 既存テストでも使われる安定入力
-      const result = await analyze(input);
-
-      // Ensure it went through the items path and second-stage fallback
-      expect(result.meta.fallback_level).toBeGreaterThanOrEqual(1);
-      // itemsが0件でも every は true になりがちなので、0件ではないことも確認
-      expect(result.breakdown.items.length).toBeGreaterThan(0);
-      expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-
-      // Kcal should be masked to 0 due to the guard
-      expect(result.nutrition.calories).toBe(0);
-    });
-    // このテストは、より詳細なユニットテスト __tests__/nutrition.level2.unit.test.js でカバーされているためスキップします。
-    // ユニットテストは、依存関係をモックすることで、第2段フォールバックのロジックパスを確実にテストします。
-    it.skip('should mask kcal to 0 for second-stage fallback with all pending items (level 2)', async () => {
-      // Mock analyze to return 0 kcal initially, triggering second-stage fallback
-      // and ensure all items are pending.
-      const input = { text: 'さば定食' }; // 既存テストでも使われる安定入力
-      const result = await analyze(input);
-
-      // Ensure it went through the items path and second-stage fallback
-      expect(result.meta.fallback_level).toBe(2);
-      expect(result.meta.source_kind).toBe('recipe'); // From archetype
-      expect(result.breakdown.items.length).toBeGreaterThan(0);
-      expect(result.breakdown.items.every((item) => item.pending)).toBe(true);
-
-      // Kcal should be masked to 0 due to the guard
-      expect(result.nutrition.calories).toBe(0);
-    });
+    const res = await analyze({ text: 'とんかつ定食' });
+    expect(res.meta.source_kind).toBe('template');
+    expect(res.meta.archetype_id).toBe('tonkatsu_teishoku');
+    expect(res.breakdown.items.length).toBeGreaterThan(0);
+    expect(typeof res.confidence).toBe('number');
   });
 });

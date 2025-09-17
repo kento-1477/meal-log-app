@@ -2,7 +2,7 @@ jest.mock('../services/nutrition/providers/geminiProvider', () => ({
   analyze: jest.fn(),
 }));
 
-describe('fallback (new spec)', () => {
+describe('Kcal Fallback (new spec)', () => {
   let analyze, geminiProvider;
   beforeEach(() => {
     jest.resetModules();
@@ -11,16 +11,16 @@ describe('fallback (new spec)', () => {
     ({ analyze } = require('../services/nutrition'));
   });
 
-  it('forces template fallback (level=1)', async () => {
+  it('no kcal masking on template fallback', async () => {
     geminiProvider.analyze.mockResolvedValueOnce({
       dish: 'とんかつ定食',
       items: [],
-      confidence: 0.7,
+      confidence: 0.88,
       meta: { source_kind: 'ai', fallback_level: 0 },
     });
-    const result = await analyze({ text: 'とんかつ定食' });
-    expect(result.meta.source_kind).toBe('template');
-    expect(result.meta.fallback_level).toBe(1);
-    expect(result.nutrition.calories).toBeGreaterThan(0); // 0マスクはしない
+    const res = await analyze({ text: 'とんかつ定食' });
+    expect(res.meta.fallback_level).toBe(1);
+    expect(res.meta.source_kind).toBe('template');
+    expect(res.nutrition.calories).toBeGreaterThan(0);
   });
 });

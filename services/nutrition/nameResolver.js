@@ -1,6 +1,6 @@
 const nameMap = require('../../src/data/food_names.json');
 
-// --- START: Canon & Alias logic (moved from computeFromItems.js) ---
+// --- START: Canon & Alias logic ---
 function _norm(s = '') {
   // Full-width to half-width, lowercase, and trim
   const halfWidth = String(s).replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) =>
@@ -66,20 +66,28 @@ const ALIAS = {
   キャベツ: 'キャベツ',
 };
 
-function canon(nameOrCode = '') {
+// For dishes - can be aggressive
+function canonDish(nameOrCode = '') {
   const k = _norm(nameOrCode);
   // Special case for とんかつ variants not covered by simple norm
-  if (/とんかつ|豚カツ|カツ|cutlet|ヒレ|フィレ|ロース/i.test(nameOrCode)) {
+  if (/とんかつ|豚カツ|カツ\b|cutlet|ヒレ|フィレ/i.test(nameOrCode)) {
     return 'とんかつ';
   }
   return ALIAS[k] || nameOrCode; // Fallback to the original if no alias found
 }
+
+// For ingredients - must be safe
+function canonIngredient(nameOrCode = '') {
+  const k = _norm(nameOrCode);
+  // Does NOT contain the aggressive regex. Only uses the alias map.
+  return ALIAS[k] || nameOrCode;
+}
+
 // --- END: Canon & Alias logic ---
 
 /**
  * Resolves display names for a list of food items.
- * If an item's name is the same as its code, it attempts to replace it
- * with a user-friendly Japanese name from the map.
+ * Uses the safe `canonIngredient` function.
  * @param {Array<object>} items - The array of food items.
  * @returns {Array<object>} The array of food items with resolved names.
  */
@@ -89,8 +97,8 @@ function resolveNames(items = []) {
   }
 
   return items.map((item) => {
-    // Use canon to get a normalized Japanese name for display
-    const canonicalName = canon(item.name || item.code || '');
+    // Use canonIngredient to get a normalized Japanese name for display
+    const canonicalName = canonIngredient(item.name || item.code || '');
     // If the canonical name is different and not just the original code, use it.
     // Also, if nameMap has a more specific display name for the code, use that.
     if (item.name === item.code && nameMap[item.code]) {
@@ -112,4 +120,4 @@ function resolveNames(items = []) {
   });
 }
 
-module.exports = { resolveNames, canon };
+module.exports = { resolveNames, canonDish, canonIngredient };
