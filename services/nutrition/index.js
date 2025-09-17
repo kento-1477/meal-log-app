@@ -112,14 +112,15 @@ async function analyze(input) {
       const originalConfidence = aiResult.confidence; // Store original confidence
       aiResult = {
         ...archetypeResult, // Base from archetype
-        ...aiResult, // Overlay original AI result (excluding confidence, which is handled below)
         items: archetypeResult.items, // Ensure archetype's items are used
+        confidence: originalConfidence, // Explicitly set original confidence
+        ...aiResult, // Overlay original AI result (meta はここで上書きされる)
         meta: makeMeta({
+          // 最後に meta を設定
           source_kind: 'template',
           fallback_level: 1,
           archetype_id: archetypeResult.archetype_id,
         }),
-        confidence: originalConfidence, // Explicitly set original confidence
       };
     } else {
       const text = input.text || '';
@@ -176,10 +177,12 @@ async function analyze(input) {
     });
 
     const finalMeta = aiResult.meta || deriveMetaFromLegacy(aiResult);
+    const atwater_delta =
+      atwater && Number.isFinite(atwater.delta) ? atwater.delta : 0;
     console.log('[nutrition]', {
       path,
       fallback_used: (finalMeta.fallback_level ?? 0) > 0,
-      atwater_delta: atwater?.delta,
+      atwater_delta,
     });
 
     return {
