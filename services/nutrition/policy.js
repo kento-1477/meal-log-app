@@ -20,8 +20,11 @@ function conservationDelta({ P, F, C, kcal }) {
   return (kcal - atw) / Math.max(1, kcal); // 例: +0.012 = +1.2%
 }
 
-/** 集計の最後に一回だけ丸め + 保存則チェック + (任意)幅 */
-function finalizeTotals(sumMid, _maybeMin = null, _maybeMax = null) {
+/** Finalize totals (new spec)
+ * - 単回の丸め＋Atwater整合の改善を行う
+ * - min/max の「範囲（range）」は提供しない（互換のため未使用引数はプレースホルダ）
+ */
+function finalizeTotals(sumMid, _min = null, _max = null) {
   // === Atwater-fixed finalize ===
   const ATWATER = {
     P: 4,
@@ -66,7 +69,6 @@ function finalizeTotals(sumMid, _maybeMin = null, _maybeMax = null) {
     return {
       total: { P, F, C, kcal },
       atwater: { delta },
-      range: null, // Range logic is removed in this simplified version
     };
   }
 }
