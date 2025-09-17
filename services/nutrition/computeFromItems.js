@@ -1,6 +1,6 @@
 // services/nutrition/computeFromItems.js
 
-const { canon } = require('./nameResolver');
+const { canonIngredient } = require('./nameResolver');
 
 // 100gあたり代表値（DBが無くても動く）
 const REP = {
@@ -43,7 +43,7 @@ function addOilAbsorption(sum, finishedGrams, factor) {
 }
 
 function per100FromName(name) {
-  const key = canon(name); // ← canon済みキーで照会
+  const key = canonIngredient(name); // ← canon済みキーで照会
   const hit = REP[key] ? { per100: REP[key], source: `category:${key}` } : null;
   console.debug('[per100]', { raw: name, canon: key, hit: !!hit });
 
@@ -82,7 +82,7 @@ function computeFromItems(items = [], dishName = '') {
     const name = it.name || it.ingredient || it.code || '';
     const grams = getGrams(it);
 
-    const key = canon(name);
+    const key = canonIngredient(name);
     const hit = per100FromName(name); // per100FromName already calls canon
     console.debug('[itemsum]', { raw: name, canon: key, grams, hit: !!hit });
 
