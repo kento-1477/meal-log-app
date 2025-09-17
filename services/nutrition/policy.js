@@ -21,7 +21,7 @@ function conservationDelta({ P, F, C, kcal }) {
 }
 
 /** 集計の最後に一回だけ丸め + 保存則チェック + (任意)幅 */
-function finalizeTotals(sumMid, maybeMin = null, maybeMax = null) {
+function finalizeTotals(sumMid, _maybeMin = null, _maybeMax = null) {
   // === Atwater-fixed finalize ===
   const ATWATER = {
     P: 4,
