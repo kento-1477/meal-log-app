@@ -16,15 +16,9 @@ jobs:
       - name: Build (optional)
         run: |
           npm run build --if-present
-      - name: Simulate dual write (TODO)
+      - name: Simulate dual write
         run: |
-          node scripts/simulate_dual_write.js fixtures/100_cases.json --write-diffs tmp/diffs.json || {
-            echo "Simulation script not yet implemented. See docs/IMPLEMENTATION_PLAN.md";
-            exit 1;
-          }
-      - name: Check thresholds (TODO)
+          node scripts/simulate_dual_write.js fixtures/100_cases.json --write-diffs tmp/diffs.json
+      - name: Check thresholds
         run: |
-          node scripts/check_diffs.js tmp/diffs.json --fail-on-breach || {
-            echo "Diff checker not yet implemented. See docs/IMPLEMENTATION_PLAN.md";
-            exit 1;
-          }
+          node scripts/check_diffs.js tmp/diffs.json

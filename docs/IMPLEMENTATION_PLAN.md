@@ -6,7 +6,7 @@
 - [x] **Idempotency保存** (2025-09-17): `/log` で Idempotency-Key を解決・`ingest_requests` を確保し、既存ログがある場合は再応答する Idempotent ヒット処理を追加。
 - [ ] **Shadow計算**: 新パイプライン（AI正規化→10ガード→算出）をサーバ内部で動かし、`meal_logs_v2_shadow` へ書き込み
 - [ ] **Diff算出**: 新旧結果の差分を計算して `diffs` テーブルに記録、ログ出力にも残す
-- [ ] **CI整備(初期)**: `scripts/simulate_dual_write.js`・`scripts/check_diffs.js` を実装し、`diff-gate` ワークフローを有効化
+- [x] **CI整備(初期)** (2025-09-18): `scripts/simulate_dual_write.js`・`scripts/check_diffs.js` を実装し、`diff-gate` ワークフローをサンプルfixture付きで有効化
 - [ ] **Shadow計算**: 新パイプライン（AI正規化→10ガード→算出）をサーバ内部で動かし、`meal_logs_v2_shadow` へ書き込み
 - [ ] **Diff算出**: 新旧結果の差分を計算して `diffs` テーブルに記録、ログ出力にも残す
 - [ ] **CI整備(初期)**: `scripts/simulate_dual_write.js`・`scripts/check_diffs.js` を実装し、`diff-gate` ワークフローを有効化

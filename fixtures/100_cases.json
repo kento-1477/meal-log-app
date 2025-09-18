@@ -1,0 +1,24 @@
+[
+  {
+    "id": "sample-1",
+    "legacy": { "calories": 620, "protein_g": 25, "fat_g": 18, "carbs_g": 80 },
+    "candidate": {
+      "calories": 615,
+      "protein_g": 26,
+      "fat_g": 17,
+      "carbs_g": 79
+    },
+    "meta": { "phase": "P0", "date": "2025-09-17" }
+  },
+  {
+    "id": "sample-2",
+    "legacy": { "calories": 540, "protein_g": 20, "fat_g": 15, "carbs_g": 60 },
+    "candidate": {
+      "calories": 550,
+      "protein_g": 21,
+      "fat_g": 16,
+      "carbs_g": 63
+    },
+    "meta": { "phase": "P0", "date": "2025-09-17" }
+  }
+]
