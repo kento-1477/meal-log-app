@@ -178,14 +178,15 @@ async function writeShadowAndDiff({
   foodItem,
   mealType,
   legacyTotals,
-  analysisResult,
+  shadowResult,
   imageId,
   landingType,
   idempotencyKey,
 }) {
   if (process.env.NORMALIZE_V2_SHADOW !== '1') return;
+  if (!shadowResult) return;
 
-  const totalsNew = analysisResult?.nutrition || {};
+  const totalsNew = shadowResult?.nutrition || {};
   const caloriesNew = Number(totalsNew.calories ?? 0);
   const proteinNew = Number(totalsNew.protein_g ?? 0);
   const fatNew = Number(totalsNew.fat_g ?? 0);
@@ -205,12 +206,21 @@ async function writeShadowAndDiff({
     legacy === 0 ? null : diff === 0 ? 0 : diff / legacy;
 
   const meta = {
-    ...(analysisResult?.meta || {}),
+    ...(shadowResult?.meta || {}),
+    source_kind: shadowResult?.meta?.source_kind ?? 'shadow',
+    shadow: true,
     idempotency_key: idempotencyKey,
   };
-  if (analysisResult?.coverage !== undefined) {
-    meta.coverage = analysisResult.coverage;
+  if (shadowResult?.coverage !== undefined) {
+    meta.coverage = shadowResult.coverage;
   }
+
+  const slotValue =
+    shadowResult?.breakdown?.slot || shadowResult?.slot || 'other';
+  const eventValue = shadowResult?.event || 'eat';
+  const shadowWarnings = shadowResult?.breakdown?.warnings ?? [];
+  const shadowItems =
+    shadowResult?.breakdown?.items ?? shadowResult?.items ?? [];
 
   const totalsJson = JSON.stringify({
     calories: caloriesNew,
@@ -238,19 +248,19 @@ async function writeShadowAndDiff({
         proteinNew,
         fatNew,
         carbsNew,
-        JSON.stringify(analysisResult),
+        JSON.stringify(shadowResult),
         imageId,
         landingType,
-        analysisResult?.slot || 'other',
-        analysisResult?.event || 'eat',
+        slotValue,
+        eventValue,
         totalsJson,
         JSON.stringify(meta),
       ],
     );
 
     const diffDetails = {
-      warnings: analysisResult?.breakdown?.warnings ?? [],
-      coverage: analysisResult?.coverage ?? null,
+      warnings: shadowWarnings,
+      coverage: shadowResult?.coverage ?? null,
       idempotency_key: idempotencyKey,
     };
 
@@ -282,6 +292,42 @@ async function writeShadowAndDiff({
   } finally {
     shadowClient.release();
   }
+}
+
+function buildShadowCandidate({ result, dishName }) {
+  if (process.env.NORMALIZE_V2_SHADOW !== '1') return null;
+  if (!result) return null;
+
+  const items =
+    (result.breakdown &&
+      Array.isArray(result.breakdown.items) &&
+      result.breakdown.items) ||
+    (Array.isArray(result.items) ? result.items : []);
+
+  const computeInput = items.map((item) => ({ ...item }));
+  const dish = dishName || result.dish || '食事';
+  const computed = computeFromItems(computeInput, dish);
+
+  return {
+    dish,
+    nutrition: {
+      protein_g: computed.P,
+      fat_g: computed.F,
+      carbs_g: computed.C,
+      calories: computed.kcal,
+    },
+    breakdown: {
+      items: computeInput,
+      warnings: computed.warnings || [],
+    },
+    meta: {
+      ...(result.meta || {}),
+      source_kind: result.meta?.source_kind || 'shadow',
+      fallback_level: result.meta?.fallback_level ?? 0,
+    },
+    coverage: result.coverage ?? null,
+    event: result.event || 'eat',
+  };
 }
 
 const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'connect.sid';
@@ -714,6 +760,11 @@ app.post(
       reservation.client.release();
       reservation.client = null;
 
+      const shadowCandidate = buildShadowCandidate({
+        result: finalAnalysisResult,
+        dishName: finalAnalysisResult.dish || message,
+      });
+
       await writeShadowAndDiff({
         pool,
         userId: user_id,
@@ -722,7 +773,7 @@ app.post(
         foodItem: insertedRow.food_item,
         mealType: insertedRow.meal_type,
         legacyTotals: insertedRow,
-        analysisResult: finalAnalysisResult,
+        shadowResult: shadowCandidate,
         imageId,
         landingType: landing_type,
         idempotencyKey: reservation.key,

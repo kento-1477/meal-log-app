@@ -1,0 +1,13 @@
+[
+  {
+    "id": "breach-kcal",
+    "legacy": { "calories": 600, "protein_g": 25, "fat_g": 18, "carbs_g": 70 },
+    "candidate": {
+      "calories": 750,
+      "protein_g": 25,
+      "fat_g": 18,
+      "carbs_g": 70
+    },
+    "meta": { "phase": "P0", "date": "2025-09-17" }
+  }
+]
