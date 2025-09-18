@@ -1,5 +1,7 @@
 # 1.0.0 (2025-07-16)
 
+> **最新仕様について:** `/docs` 以下に移管された [SPEC](docs/SPEC.md) / [RUNBOOK](docs/RUNBOOK.md) / [TESTPLAN](docs/TESTPLAN.md) が食事記録パイプラインの正本です。本ファイルはプロジェクトの初期ログとして維持していますが、栄養計算やDB構造に関する最新情報はドキュメントハブを参照してください。
+
 ### Features
 
 - Initial project setup and user authentication feature 1905184

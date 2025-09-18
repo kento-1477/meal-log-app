@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { randomUUID: _randomUUID } = require('crypto');
+const { randomUUID: _randomUUID, createHash } = require('crypto');
 const path = require('node:path');
 const express = require('express');
 const bcrypt = require('bcryptjs');
@@ -41,6 +41,248 @@ const upload = multer({
     cb(null, true);
   },
 });
+
+function stableStringify(value) {
+  if (value === null) return 'null';
+  const t = typeof value;
+  if (t === 'number' || t === 'boolean') return JSON.stringify(value);
+  if (t === 'string') return JSON.stringify(value);
+  if (t === 'bigint') return `"${value.toString()}"`;
+  if (Buffer.isBuffer(value)) {
+    return `"buf:${value.toString('hex')}"`;
+  }
+  if (value && typeof value.toJSON === 'function') {
+    return stableStringify(value.toJSON());
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  }
+  if (value instanceof Date) {
+    return JSON.stringify(value.toISOString());
+  }
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value).sort();
+    return `{${keys
+      .map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function digestFiles(files = []) {
+  if (!files.length) return 'nofile';
+  const master = createHash('sha256');
+  files
+    .map((file) => {
+      const name = file?.originalname || '';
+      const hex = createHash('sha256')
+        .update(file?.buffer || Buffer.alloc(0))
+        .digest('hex');
+      return [name, hex];
+    })
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([name, hex]) => {
+      master.update(name);
+      master.update('\n');
+      master.update(hex);
+      master.update('\n');
+    });
+  return master.digest('hex');
+}
+
+function computeAutoIdempotencyKey({ userId, body, filesDigest }) {
+  const hash = createHash('sha256');
+  hash.update(String(userId || ''));
+  hash.update('\n');
+  hash.update(stableStringify(body || {}));
+  hash.update('\n');
+  hash.update(filesDigest || 'nofile');
+  return `auto:${hash.digest('hex')}`;
+}
+
+function advisoryKeyForIdempotency(key) {
+  const hex = createHash('sha256').update(key).digest('hex').slice(0, 16);
+  const unsigned = BigInt('0x' + hex);
+  return BigInt.asIntN(64, unsigned);
+}
+
+async function reserveIdempotency({ req, userId, files, pool }) {
+  const client = await pool.connect();
+  const headerKey = req.get('Idempotency-Key');
+  const bodyKey = req.body?.idempotency_key;
+  const sanitizedBody = { ...(req.body || {}) };
+  delete sanitizedBody.idempotency_key;
+
+  const filesDigest = digestFiles(files);
+
+  const effectiveKey =
+    headerKey ||
+    bodyKey ||
+    computeAutoIdempotencyKey({ userId, body: sanitizedBody, filesDigest });
+
+  const advisoryKey = advisoryKeyForIdempotency(effectiveKey);
+
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [
+      advisoryKey.toString(),
+    ]);
+
+    const { rows } = await client.query(
+      `
+        INSERT INTO ingest_requests (user_id, request_key, log_id)
+        VALUES ($1, $2, NULL)
+        ON CONFLICT (user_id, request_key)
+        DO UPDATE SET request_key = EXCLUDED.request_key
+        RETURNING id, log_id, created_at
+      `,
+      [userId, effectiveKey],
+    );
+
+    const ingestRow = rows[0];
+    if (ingestRow.log_id) {
+      const { rows: existing } = await client.query(
+        `SELECT id, ai_raw::jsonb AS ai_raw_json, landing_type
+           FROM meal_logs
+          WHERE id = $1 AND user_id = $2`,
+        [ingestRow.log_id, userId],
+      );
+      await client.query('COMMIT');
+      client.release();
+      return {
+        status: 'hit',
+        key: effectiveKey,
+        ingestRow,
+        existing,
+      };
+    }
+
+    return {
+      status: 'new',
+      key: effectiveKey,
+      ingestRow,
+      client,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
+    throw error;
+  }
+}
+
+async function writeShadowAndDiff({
+  pool,
+  userId,
+  logId,
+  consumedAt,
+  foodItem,
+  mealType,
+  legacyTotals,
+  analysisResult,
+  imageId,
+  landingType,
+  idempotencyKey,
+}) {
+  if (process.env.NORMALIZE_V2_SHADOW !== '1') return;
+
+  const totalsNew = analysisResult?.nutrition || {};
+  const caloriesNew = Number(totalsNew.calories ?? 0);
+  const proteinNew = Number(totalsNew.protein_g ?? 0);
+  const fatNew = Number(totalsNew.fat_g ?? 0);
+  const carbsNew = Number(totalsNew.carbs_g ?? 0);
+
+  const caloriesLegacy = Number(legacyTotals?.calories ?? 0);
+  const proteinLegacy = Number(legacyTotals?.protein_g ?? 0);
+  const fatLegacy = Number(legacyTotals?.fat_g ?? 0);
+  const carbsLegacy = Number(legacyTotals?.carbs_g ?? 0);
+
+  const diffCalories = Math.round(caloriesNew - caloriesLegacy);
+  const diffProtein = proteinNew - proteinLegacy;
+  const diffFat = fatNew - fatLegacy;
+  const diffCarbs = carbsNew - carbsLegacy;
+
+  const rel = (diff, legacy) =>
+    legacy === 0 ? null : diff === 0 ? 0 : diff / legacy;
+
+  const meta = {
+    ...(analysisResult?.meta || {}),
+    idempotency_key: idempotencyKey,
+  };
+  if (analysisResult?.coverage !== undefined) {
+    meta.coverage = analysisResult.coverage;
+  }
+
+  const totalsJson = JSON.stringify({
+    calories: caloriesNew,
+    protein_g: proteinNew,
+    fat_g: fatNew,
+    carbs_g: carbsNew,
+  });
+
+  const shadowClient = await pool.connect();
+  try {
+    await shadowClient.query('BEGIN');
+
+    await shadowClient.query(
+      `INSERT INTO meal_logs_v2_shadow
+         (user_id, food_item, meal_type, consumed_at, calories, protein_g, fat_g, carbs_g,
+          ai_raw, image_id, landing_type, slot, event, totals, meta)
+       VALUES
+         ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14::jsonb, $15::jsonb)`,
+      [
+        userId,
+        foodItem,
+        mealType,
+        consumedAt,
+        caloriesNew,
+        proteinNew,
+        fatNew,
+        carbsNew,
+        JSON.stringify(analysisResult),
+        imageId,
+        landingType,
+        analysisResult?.slot || 'other',
+        analysisResult?.event || 'eat',
+        totalsJson,
+        JSON.stringify(meta),
+      ],
+    );
+
+    const diffDetails = {
+      warnings: analysisResult?.breakdown?.warnings ?? [],
+      coverage: analysisResult?.coverage ?? null,
+      idempotency_key: idempotencyKey,
+    };
+
+    await shadowClient.query(
+      `INSERT INTO diffs
+         (phase, user_id, log_id, date, dkcal, dp, df, dc, rel_p, rel_f, rel_c, level, details)
+       VALUES
+         ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'record', $12::jsonb)`,
+      [
+        process.env.NORMALIZE_V2_PHASE || 'P0',
+        userId,
+        logId,
+        consumedAt ? new Date(consumedAt) : new Date(),
+        diffCalories,
+        diffProtein,
+        diffFat,
+        diffCarbs,
+        rel(diffProtein, proteinLegacy),
+        rel(diffFat, fatLegacy),
+        rel(diffCarbs, carbsLegacy),
+        JSON.stringify(diffDetails),
+      ],
+    );
+
+    await shadowClient.query('COMMIT');
+  } catch (err) {
+    await shadowClient.query('ROLLBACK').catch(() => {});
+    console.error('shadow write failed', err);
+  } finally {
+    shadowClient.release();
+  }
+}
 
 const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'connect.sid';
 const app = express();
@@ -348,6 +590,7 @@ app.post(
   upload.single('image'),
   requireApiAuth, // Temporarily disabled authentication middleware
   async (req, res, next) => {
+    let reservation;
     try {
       const message = (req.body?.message || '').trim();
       const file = req.file || null;
@@ -355,6 +598,45 @@ app.post(
       if (!user_id || (!message && !file)) {
         return res.status(400).json({ ok: false, error: 'bad_request' });
       }
+
+      const files = Array.isArray(req.files) ? req.files : file ? [file] : [];
+
+      reservation = await reserveIdempotency({
+        req,
+        userId: user_id,
+        files,
+        pool,
+      });
+
+      if (reservation.status === 'hit') {
+        const existing = reservation.existing[0];
+        let aiPayload = existing?.ai_raw_json;
+        if (typeof aiPayload === 'string') {
+          try {
+            aiPayload = JSON.parse(aiPayload);
+          } catch (err) {
+            console.warn('failed to parse ai_raw for idempotent hit', err);
+            aiPayload = {};
+          }
+        }
+        return res.status(200).json({
+          ok: true,
+          success: true,
+          idempotent: true,
+          idempotency_key: reservation.key,
+          logId: existing?.id ?? null,
+          dish: aiPayload?.dish ?? null,
+          confidence: aiPayload?.confidence ?? null,
+          nutrition: aiPayload?.nutrition ?? null,
+          breakdown: aiPayload?.breakdown ?? null,
+          meta: aiPayload?.meta ?? null,
+          landing_type:
+            aiPayload?.meta?.source_kind ?? existing?.landing_type ?? null,
+        });
+      }
+
+      const client = reservation.client;
+
       const analysisResult = await analyze({
         text: message,
         imageBuffer: file?.buffer,
@@ -395,7 +677,7 @@ app.post(
           file.buffer,
           file.mimetype,
         );
-        const { rows: mediaRows } = await pool.query(
+        const { rows: mediaRows } = await client.query(
           `INSERT INTO media_assets (user_id, kind, mime, bytes, url)
            VALUES ($1, 'image', $2, $3, $4) RETURNING id`,
           [user_id, file.mimetype, file.size, imageUrl],
@@ -404,12 +686,12 @@ app.post(
       }
       const landing_type = finalAnalysisResult.meta.source_kind;
 
-      const { rows } = await pool.query(
+      const { rows } = await client.query(
         `INSERT INTO meal_logs
        (user_id, food_item, meal_type, consumed_at,
         calories, protein_g, fat_g, carbs_g, ai_raw, image_id, landing_type)
        VALUES ($1, $2, 'Chat Log', NOW(), $3, $4, $5, $6, $7::jsonb, $8, $9)
-       RETURNING id`,
+       RETURNING id, food_item, meal_type, consumed_at, calories, protein_g, fat_g, carbs_g, landing_type`,
         [
           user_id,
           finalAnalysisResult.dish || message,
@@ -422,10 +704,34 @@ app.post(
           landing_type,
         ],
       );
-      const logId = rows[0].id;
+      const insertedRow = rows[0];
+      const logId = insertedRow.id;
+      await client.query('UPDATE ingest_requests SET log_id=$1 WHERE id=$2', [
+        logId,
+        reservation.ingestRow.id,
+      ]);
+      await client.query('COMMIT');
+      reservation.client.release();
+      reservation.client = null;
+
+      await writeShadowAndDiff({
+        pool,
+        userId: user_id,
+        logId,
+        consumedAt: insertedRow.consumed_at,
+        foodItem: insertedRow.food_item,
+        mealType: insertedRow.meal_type,
+        legacyTotals: insertedRow,
+        analysisResult: finalAnalysisResult,
+        imageId,
+        landingType: landing_type,
+        idempotencyKey: reservation.key,
+      });
       res.status(200).json({
         ok: true,
         success: true,
+        idempotent: false,
+        idempotency_key: reservation.key,
         logId,
         dish: finalAnalysisResult.dish,
         confidence: finalAnalysisResult.confidence,
@@ -439,7 +745,17 @@ app.post(
         slotState.set(logId, analysisResult); // Store the full analysisResult
       }
     } catch (err) {
-      next(err);
+      if (reservation && reservation.status === 'new' && reservation.client) {
+        await reservation.client.query('ROLLBACK').catch(() => {});
+        reservation.client.release();
+        reservation.client = null;
+      }
+      console.error('POST /log failed', err);
+      res.status(500).json({
+        ok: false,
+        success: false,
+        error: err?.message || 'internal_error',
+      });
     }
   },
 );

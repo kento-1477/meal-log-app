@@ -1,58 +1,72 @@
 # ️ Meal‑Log App
 
-Next‑gen food tracking app that lets users log meals by simply chatting or sending a photo. The backend analyses the image/text, estimates calories & PFC (Protein/Fat/Carbs), and stores the record in PostgreSQL so users can view daily/weekly reports.
+Next‑gen food tracking app that lets users log meals by simply chatting or sending a photo. The backend analyses the image/text, applies deterministic guards, estimates calories & PFC (Protein/Fat/Carbs), and stores the record in PostgreSQL so users can view daily/weekly reports without breaking existing UX.
+
+---
+
+## 📚 Documentation Hub
+
+- [仕様 (SPEC.md)](docs/SPEC.md) — AI正規化・10ガード・Phase切替の全体像
+- [テスト計画 (TESTPLAN.md)](docs/TESTPLAN.md) — RACI / CI マトリクス / フィクスチャ一覧
+- [運用手順 (RUNBOOK.md)](docs/RUNBOOK.md) — Phase0〜3・ロールバック・アラート対応
+- [API スキーマ](docs/api/SCHEMA.md) — `item_id` 22文字 base64url などのJSON Schema
+- [ADR](docs/adr) — Atwater方針 / Never‑Zero / Dual Migration の意思決定記録
+- [オペレーションメモ](docs/ops/archive.md) — Shadowテーブルのアーカイブ実行手順
 
 ---
 
 ## ✨ Key Features
 
-| Category              | Details                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
-| **Chat Logging**      | `/log` endpoint accepts text or image uploads → AI (Gemini) estimates nutrition → reply sent back |
-| **Image → Nutrition** | `services/nutrition/providers/geminiProvider.js` uses Gemini API to estimate PFC from text.       |
-| **AI Advice**         | Gemini generates personalised tips shown on dashboard                                             |
-| **Reminders / Cron**  | Scheduled coaching messages (gentle/intense) avoiding duplicates                                  |
-| **Auth**              | Passport‑local sessions stored in PG `connect-pg-simple`                                          |
-| **CI / CD**           | GitHub Actions runs lint＋tests; branch protection blocks un‑green PRs                            |
-| **Infra**             | Node 22 · Express · Multer · PostgreSQL · (Render.com deploy)                                     |
+| Category              | Details                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Chat Logging**      | `/log` endpoint accepts text or image uploads → AI正規化 → 10ガード → nutrition計算（dual write）                       |
+| **Image → Nutrition** | `services/nutrition/providers/geminiProvider.js` uses Gemini API to propose items; deterministic fallbacks keep UX safe |
+| **AI Advice**         | Gemini generates personalised tips shown on dashboard                                                                   |
+| **Reminders / Cron**  | Scheduled coaching messages (gentle/intense) avoiding duplicates                                                        |
+| **Auth**              | Passport‑local sessions stored in PG `connect-pg-simple`                                                                |
+| **CI / CD**           | GitHub Actions runs lint＋tests＋diff gate; branch protection blocks un‑green PRs                                       |
+| **Infra**             | Node 22 · Express · Multer · PostgreSQL · (Render.com deploy)                                                           |
 
 ---
 
 ## API Design & Data Contracts
 
+### /log ingestion flow (Legacy互換 + 新パイプライン)
+
+1. クライアントは `POST /log` にテキスト/画像を送信（必要に応じて `Idempotency-Key` ヘッダを付与）。
+2. サーバーは既存レガシーパイプラインを保持しつつ、Feature Flag に応じて **AI正規化 → 10ガード → nutrition計算** の新経路を並走。
+3. 新経路の結果は `meal_logs_v2_shadow` へ書き込み、差分は `diffs` テーブルで監視。
+4. Phase2 以降は Dual Read アダプタが新DTOを旧形式に変換してレスポンス。
+
 ### Data Source of Truth
 
-When handling nutrition data, it's important to understand the source of truth:
+- **`meal_logs` カラム (`calories`, `protein_g`, など)**: 公式レポート・ダッシュボード向けの主権データ。Phase3以降もここが真実。
+- **`ai_raw` JSON**: レガシー互換用のAIレスポンス保持。slot再計算やデバッグ用途で参照。
+- **`meta` JSON**: `dict_version`・`schema_version`・`flags`・`set_proposals` など、今回の正規化で必要な付帯情報。
+- **`diffs` テーブル**: Dual write中の新旧差分を保管。SLO逸脱の自動ロールバック判定に使用。
 
-- **Database Columns (`calories`, `protein_g`, etc.):** These columns in the `meal_logs` table are considered the **source of truth** for core nutritional values. They are used for official reporting, dashboard calculations, and any other critical feature.
-- **`ai_raw` JSON Column:** This column stores the complete, raw JSON response from the AI nutrition analysis, including the calculated breakdown of items. Its primary purposes are:
-  1.  **History & Debugging:** To keep a record of what the AI returned for a given request.
-  2.  **Recalculation:** To provide the necessary data for the `/log/choose-slot` endpoint, which allows users to adjust meal components and recalculate nutrition without calling the AI again.
+### Idempotency
 
-In summary: The individual columns are the authority for core data, while `ai_raw` is a historical record and a payload for secondary operations.
+- クライアントは `Idempotency-Key`（または Body の `idempotency_key`）を送ることで二重記録を防止。
+- サーバーは `ingest_requests(user_id, request_key)` に保存し、再送時は当時のレスポンスを返却。
+- キー未指定の場合は `userId + payload + 画像ハッシュ` をsha256化した `auto:<hex>` を生成。
 
 ---
 
-## ️ Directory Structure (after refactor)
+## ️ Directory Structure (key folders)
 
 ```
 meal-log-app/
-├─ .github/workflows/ci.yml      # GitHub Actions
-├─ src/
-│  ├─ routes/
-│  │   ├─ chat.js               # /log, /api/meal-data …
-│  │   ├─ reminder.js           # cron endpoints
-│  │   └─ auth.js
-│  ├─ services/
-│  │   ├─ nutrition/            # Nutrition analysis provider
-│  │   │  ├─ providers/geminiProvider.js
-│  │   │  └─ index.js
-│  │   └─ mealLog.js            # DB layer
-│  ├─ models/                   # ORMapper definitions
-│  └─ server.js                 # app initialiser
-├─ migrations/                  # Knex migration files
-├─ public/                      # static front‑end
-└─ README.md                    # ← this file
+├─ docs/                        # ← 新仕様・テスト・RUNBOOK/ADR/Schema/prompts
+├─ services/
+│  ├─ nutrition/               # AI正規化・computeロジック
+│  ├─ meals.js                 # meal_logs CRUD（slotState含む）
+│  └─ reminders/               # reminder services
+├─ migrations/                 # Knex migrations（加法的変更＋shadow/diffs）
+├─ scripts/                    # CI/ops向けスクリプト（例: simulate_dual_write）
+├─ server.js                   # Express entry（/log, slot API, healthz）
+├─ public/                     # static front-end assets
+└─ README.md
 ```
 
 ---
@@ -124,33 +138,42 @@ curl http://your-app-url/healthz
 
 ---
 
-## CI / Branch Protection (WHAT WE ARE DOING NOW)
+## CI / Branch Protection
 
-1. `.github/workflows/ci.yml` runs on **push & PR**, executing:
+CIは `ci.yml`（lint / unit / integration / golden / smoke）と、PR専用の `diff-gate.yml`（差分しきい値チェック）で構成されています。
 
-   ```yaml
-   - npm ci
-   - npm test # echo until tests are written
-   ```
+1. `.github/workflows/ci.yml`
+   - `npm ci`
+   - `npm run lint`
+   - `npm test`
+   - `npm run test:integration`
+   - `npm run test:e2e:smoke`
 
-2. GitHub Settings → Branches → **Add classic branch protection rule** for `main`:
+2. `.github/workflows/diff-gate.yml`
+   - fixturesを用いた dual write シミュレーション
+   - `scripts/check_diffs.js` で §19 閾値を超えたら PR を fail
+
+3. Branch protection（`main`）
    - ✅ Require pull request before merging
-   - ✅ Require status checks to pass → **`ci-test / test`**
+   - ✅ Require status checks → `ci / build`, `ci / tests`, `diff-gate`
 
-3. Effect: PR stays un‑mergeable until CI is green.
+> **運用TIP**: Phaseごとの flag 切替は RUNBOOK を参照し、CIのステータスが揃ってから実施してください。
 
-> **Next milestone**: write real Jest + Supertest tests for `/log`.
+### 個人開発での進め方
+
+- ロードマップの各項目は `/docs/IMPLEMENTATION_PLAN.md` に具体化しています。タスクを順に着手し、完了したら該当チェックボックスを更新してください。
+- CIや差分チェックが未整備の段階では、`docs/TESTPLAN.md` の該当セクションに従って手動検証を実施し、結果を記録しておくと後続フェーズで自動化しやすくなります。
 
 ---
 
 ## ️ Roadmap
 
-- [x] Basic CI pipeline ✅
-- [x] Branch protection rules ✅
-- [ ] Split `server.js` into routes/services
-- [ ] Implement Knex migrations & seeding
-- [ ] Finish `services/pfc.js` (image model)
-- [ ] Dashboard charts & goal tracking
+- [x] Basic CI pipeline & branch protection
+- [x] SPEC/TESTPLAN/RUNBOOK/ADR を `/docs` に統合
+- [ ] Phase0：Shadow compute + `diffs` ログ + Idempotency 保存
+- [ ] Phase1：Dual write と差分監視ダッシュボード
+- [ ] Phase2：Dual read（visual regression整備）
+- [ ] Phase3：新パイプラインへスイッチ & Shadowアーカイブ自動化
 - [ ] Staging / Production deploy on Render
 
 ---
