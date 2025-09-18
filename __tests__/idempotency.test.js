@@ -68,4 +68,40 @@ describe('POST /log idempotency behaviour', () => {
     expect(second.body.idempotent).toBe(true);
     expect(second.body.logId).toBe(first.body.logId);
   });
+
+  it('serialises concurrent requests with the same Idempotency-Key', async () => {
+    await pool.query(
+      'TRUNCATE TABLE ingest_requests, meal_logs RESTART IDENTITY CASCADE',
+    );
+
+    const key = 'parallel-key-1';
+    const payload = { message: 'からあげ定食', user_id: userId };
+
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        request(app).post('/log').set('Idempotency-Key', key).send(payload),
+      ),
+    );
+
+    const successes = responses.filter((res) => res.status === 200);
+    expect(successes).toHaveLength(5);
+
+    const nonIdempotent = successes.filter(
+      (res) => res.body.idempotent === false,
+    );
+    expect(nonIdempotent).toHaveLength(1);
+
+    const logId = nonIdempotent[0].body.logId;
+    const idempotent = successes.filter((res) => res.body.idempotent === true);
+    expect(idempotent).toHaveLength(4);
+    idempotent.forEach((res) => {
+      expect(res.body.logId).toBe(logId);
+    });
+
+    const { rows } = await pool.query(
+      'SELECT COUNT(*)::int AS count FROM meal_logs WHERE user_id = $1',
+      [userId],
+    );
+    expect(rows[0].count).toBe(1);
+  });
 });

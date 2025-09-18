@@ -13,6 +13,25 @@ const { analyze, computeFromItems } = require('./services/nutrition');
 // const { LogItemSchema } = require('./schemas/logItem');
 const client = require('prom-client');
 const { aiRawParseFail, chooseSlotMismatch } = require('./metrics/aiRaw');
+const idempotencyCounter = new client.Counter({
+  name: 'meal_log_idempotency_total',
+  help: 'Idempotency outcomes for /log requests',
+  labelNames: ['status'],
+});
+const shadowWriteDuration = new client.Histogram({
+  name: 'meal_log_shadow_write_duration_seconds',
+  help: 'Duration of shadow write pipeline',
+  buckets: [0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5],
+});
+const shadowWriteErrorCounter = new client.Counter({
+  name: 'meal_log_shadow_write_errors_total',
+  help: 'Shadow write failures',
+});
+const diffBreachCounter = new client.Counter({
+  name: 'meal_log_shadow_diff_breach_total',
+  help: 'Shadow diff threshold breaches',
+  labelNames: ['field'],
+});
 const {
   createInitialSlots: _createInitialSlots,
   applySlot,
@@ -106,6 +125,19 @@ function advisoryKeyForIdempotency(key) {
   return BigInt.asIntN(64, unsigned);
 }
 
+function diffThresholds(legacy) {
+  const kcal = Math.abs(Number(legacy?.calories ?? 0));
+  return {
+    dkcal: Math.max(40, 0.08 * kcal),
+    dp: 4,
+    df: 5,
+    dc: 6,
+    rel_p: 0.12,
+    rel_f: 0.12,
+    rel_c: 0.12,
+  };
+}
+
 async function reserveIdempotency({ req, userId, files, pool }) {
   const client = await pool.connect();
   const headerKey = req.get('Idempotency-Key');
@@ -128,18 +160,27 @@ async function reserveIdempotency({ req, userId, files, pool }) {
       advisoryKey.toString(),
     ]);
 
-    const { rows } = await client.query(
+    let rows = await client.query(
       `
         INSERT INTO ingest_requests (user_id, request_key, log_id)
         VALUES ($1, $2, NULL)
         ON CONFLICT (user_id, request_key)
-        DO UPDATE SET request_key = EXCLUDED.request_key
+        DO NOTHING
         RETURNING id, log_id, created_at
       `,
       [userId, effectiveKey],
     );
 
-    const ingestRow = rows[0];
+    if (rows.rowCount === 0) {
+      rows = await client.query(
+        `SELECT id, log_id, created_at
+           FROM ingest_requests
+          WHERE user_id = $1 AND request_key = $2`,
+        [userId, effectiveKey],
+      );
+    }
+
+    const ingestRow = rows.rows[0];
     if (ingestRow.log_id) {
       const { rows: existing } = await client.query(
         `SELECT id, ai_raw::jsonb AS ai_raw_json, landing_type
@@ -149,6 +190,13 @@ async function reserveIdempotency({ req, userId, files, pool }) {
       );
       await client.query('COMMIT');
       client.release();
+      if (existing.length === 0) {
+        return {
+          status: 'stale',
+          key: effectiveKey,
+          ingestRow,
+        };
+      }
       return {
         status: 'hit',
         key: effectiveKey,
@@ -186,6 +234,8 @@ async function writeShadowAndDiff({
   if (process.env.NORMALIZE_V2_SHADOW !== '1') return;
   if (!shadowResult) return;
 
+  const endTimer = shadowWriteDuration.startTimer();
+
   const totalsNew = shadowResult?.nutrition || {};
   const caloriesNew = Number(totalsNew.calories ?? 0);
   const proteinNew = Number(totalsNew.protein_g ?? 0);
@@ -204,6 +254,9 @@ async function writeShadowAndDiff({
 
   const rel = (diff, legacy) =>
     legacy === 0 ? null : diff === 0 ? 0 : diff / legacy;
+  const relProtein = rel(diffProtein, proteinLegacy);
+  const relFat = rel(diffFat, fatLegacy);
+  const relCarbs = rel(diffCarbs, carbsLegacy);
 
   const meta = {
     ...(shadowResult?.meta || {}),
@@ -264,6 +317,29 @@ async function writeShadowAndDiff({
       idempotency_key: idempotencyKey,
     };
 
+    const limits = diffThresholds(legacyTotals);
+    if (Math.abs(diffCalories) > limits.dkcal) {
+      diffBreachCounter.labels('dkcal').inc();
+    }
+    if (Math.abs(diffProtein) > limits.dp) {
+      diffBreachCounter.labels('dp').inc();
+    }
+    if (Math.abs(diffFat) > limits.df) {
+      diffBreachCounter.labels('df').inc();
+    }
+    if (Math.abs(diffCarbs) > limits.dc) {
+      diffBreachCounter.labels('dc').inc();
+    }
+    if (relProtein !== null && Math.abs(relProtein) > limits.rel_p) {
+      diffBreachCounter.labels('rel_p').inc();
+    }
+    if (relFat !== null && Math.abs(relFat) > limits.rel_f) {
+      diffBreachCounter.labels('rel_f').inc();
+    }
+    if (relCarbs !== null && Math.abs(relCarbs) > limits.rel_c) {
+      diffBreachCounter.labels('rel_c').inc();
+    }
+
     await shadowClient.query(
       `INSERT INTO diffs
          (phase, user_id, log_id, date, dkcal, dp, df, dc, rel_p, rel_f, rel_c, level, details)
@@ -278,9 +354,9 @@ async function writeShadowAndDiff({
         diffProtein,
         diffFat,
         diffCarbs,
-        rel(diffProtein, proteinLegacy),
-        rel(diffFat, fatLegacy),
-        rel(diffCarbs, carbsLegacy),
+        relProtein,
+        relFat,
+        relCarbs,
         JSON.stringify(diffDetails),
       ],
     );
@@ -288,9 +364,11 @@ async function writeShadowAndDiff({
     await shadowClient.query('COMMIT');
   } catch (err) {
     await shadowClient.query('ROLLBACK').catch(() => {});
+    shadowWriteErrorCounter.inc();
     console.error('shadow write failed', err);
   } finally {
     shadowClient.release();
+    endTimer();
   }
 }
 
@@ -665,6 +743,7 @@ app.post(
             aiPayload = {};
           }
         }
+        idempotencyCounter.labels('hit').inc();
         return res.status(200).json({
           ok: true,
           success: true,
@@ -678,6 +757,18 @@ app.post(
           meta: aiPayload?.meta ?? null,
           landing_type:
             aiPayload?.meta?.source_kind ?? existing?.landing_type ?? null,
+        });
+      }
+
+      if (reservation.status === 'stale') {
+        idempotencyCounter.labels('stale').inc();
+        return res.status(409).json({
+          ok: false,
+          success: false,
+          idempotent: true,
+          error: 'stale_idempotency',
+          message:
+            'Previous result no longer available. Retry without Idempotency-Key.',
         });
       }
 
@@ -765,18 +856,20 @@ app.post(
         dishName: finalAnalysisResult.dish || message,
       });
 
-      await writeShadowAndDiff({
-        pool,
-        userId: user_id,
-        logId,
-        consumedAt: insertedRow.consumed_at,
-        foodItem: insertedRow.food_item,
-        mealType: insertedRow.meal_type,
-        legacyTotals: insertedRow,
-        shadowResult: shadowCandidate,
-        imageId,
-        landingType: landing_type,
-        idempotencyKey: reservation.key,
+      setImmediate(() => {
+        writeShadowAndDiff({
+          pool,
+          userId: user_id,
+          logId,
+          consumedAt: insertedRow.consumed_at,
+          foodItem: insertedRow.food_item,
+          mealType: insertedRow.meal_type,
+          legacyTotals: insertedRow,
+          shadowResult: shadowCandidate,
+          imageId,
+          landingType: landing_type,
+          idempotencyKey: reservation.key,
+        }).catch(() => {});
       });
       res.status(200).json({
         ok: true,
@@ -791,6 +884,7 @@ app.post(
         meta: finalAnalysisResult.meta,
         landing_type: finalAnalysisResult.meta.source_kind, // for backward compatibility
       });
+      idempotencyCounter.labels('new').inc();
       const volatileOn = process.env.ENABLE_VOLATILE_SLOTS === '1';
       if (volatileOn) {
         slotState.set(logId, analysisResult); // Store the full analysisResult
@@ -802,11 +896,8 @@ app.post(
         reservation.client = null;
       }
       console.error('POST /log failed', err);
-      res.status(500).json({
-        ok: false,
-        success: false,
-        error: err?.message || 'internal_error',
-      });
+      idempotencyCounter.labels('error').inc();
+      next(err);
     }
   },
 );

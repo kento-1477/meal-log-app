@@ -82,6 +82,9 @@ exports.up = async function up(knex) {
     await knex.raw(
       "ALTER TABLE diffs ADD CONSTRAINT diffs_level_chk CHECK (level IN ('record','day'))",
     );
+    await knex.raw(
+      'ALTER TABLE diffs ADD CONSTRAINT diffs_record_unique UNIQUE (log_id, level)',
+    );
   }
 };
 
