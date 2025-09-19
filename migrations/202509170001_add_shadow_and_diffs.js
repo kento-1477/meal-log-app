@@ -86,6 +86,13 @@ exports.up = async function up(knex) {
       'ALTER TABLE diffs ADD CONSTRAINT diffs_record_unique UNIQUE (log_id, level)',
     );
   }
+
+  await knex.raw(
+    'CREATE INDEX IF NOT EXISTS idx_diffs_level_user_date_phase ON diffs (level, user_id, date, phase)',
+  );
+  await knex.raw(
+    "CREATE UNIQUE INDEX IF NOT EXISTS diffs_day_unique ON diffs (phase, user_id, date) WHERE level = 'day'",
+  );
 };
 
 exports.down = async function down() {

@@ -115,8 +115,14 @@ CREATE TABLE IF NOT EXISTS diffs (
 CREATE INDEX IF NOT EXISTS idx_diffs_user_date ON diffs(user_id, date);
 ```
 
-- **生成ポイント**：Dual Write 完了後に**同期的に**差分算出→`diffs` へINSERT。日粒度はバッチ（1分毎）で集計INSERT。
+- **生成ポイント**：Dual Write 完了後に**同期的に**差分算出→`diffs` へINSERT。日粒度も同一トランザクション内で即時Upsertし、将来的な高負荷時はバッファ/バッチ化を検討する。
 - **SLO判定**：Grafanaは `diffs` を直接読むか、ETLで時系列に送る。RUNBOOKの `SELECT ... FROM diffs` はこのテーブルを参照。
+- **集計ルール**：
+  - 日付の確定は `DIFF_TZ_OFFSET_MINUTES`（分単位、既定値0=UTC）で指定したタイムゾーンの**ローカル日付**に丸めてから `DATE` として保存する。JSTなら `540` を指定。
+  - 日次スナップショットは `dkcal` を整数、`dp/df/dc` を小数第2位で丸めて保持する。
+  - しきい値計算は Node の `diffThresholds` を単一のソースとし、SQL側では独自計算をしない。
+  - 構造化ログに含める `idempotency_key` はハッシュ値（先頭16桁）を記録し、生値は出力しない。
+  - テーブルインデックス：`idx_diffs_level_user_date_phase`（検索最適化）と `diffs_day_unique`（`level='day'` の一意制約）。
 
 ### 29.4 Visual Regression 閾値と測定ツール
 

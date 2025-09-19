@@ -32,6 +32,35 @@ const diffBreachCounter = new client.Counter({
   help: 'Shadow diff threshold breaches',
   labelNames: ['field'],
 });
+const diffDailyBreachCounter = new client.Counter({
+  name: 'meal_log_shadow_daily_diff_breach_total',
+  help: 'Shadow diff daily aggregate threshold breaches',
+  labelNames: ['field'],
+});
+const diffAbsoluteHistogram = new client.Histogram({
+  name: 'meal_log_shadow_diff_abs',
+  help: 'Absolute diff magnitude per record',
+  labelNames: ['field'],
+  buckets: [0.5, 1, 2, 5, 10, 20, 40, 80, 160, 320, 640],
+});
+const diffRelativeHistogram = new client.Histogram({
+  name: 'meal_log_shadow_diff_rel',
+  help: 'Absolute relative diff per record',
+  labelNames: ['field'],
+  buckets: [0.01, 0.02, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6],
+});
+const diffDailyAbsoluteHistogram = new client.Histogram({
+  name: 'meal_log_shadow_daily_diff_abs',
+  help: 'Absolute diff magnitude per user/day snapshot',
+  labelNames: ['field'],
+  buckets: [1, 5, 10, 20, 40, 80, 160, 320, 640, 1280],
+});
+const diffDailyRelativeHistogram = new client.Histogram({
+  name: 'meal_log_shadow_daily_diff_rel',
+  help: 'Absolute relative diff per user/day snapshot',
+  labelNames: ['field'],
+  buckets: [0.01, 0.02, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6],
+});
 const {
   createInitialSlots: _createInitialSlots,
   applySlot,
@@ -138,6 +167,187 @@ function diffThresholds(legacy) {
   };
 }
 
+const DIFF_TZ_OFFSET_MINUTES = (() => {
+  const raw = Number.parseInt(process.env.DIFF_TZ_OFFSET_MINUTES || '0', 10);
+  return Number.isFinite(raw) ? raw : 0;
+})();
+
+function pad2(value) {
+  return String(Math.trunc(Math.abs(value))).padStart(2, '0');
+}
+
+function computeDiffDate(consumedAt) {
+  const base = consumedAt ? new Date(consumedAt) : new Date();
+  const offsetMs = DIFF_TZ_OFFSET_MINUTES * 60 * 1000;
+  const adjusted = new Date(base.getTime() + offsetMs);
+  const year = adjusted.getUTCFullYear();
+  const month = pad2(adjusted.getUTCMonth() + 1);
+  const day = pad2(adjusted.getUTCDate());
+  const dbDate = `${year}-${month}-${day}`;
+
+  const sign = DIFF_TZ_OFFSET_MINUTES >= 0 ? '+' : '-';
+  const absMinutes = Math.abs(DIFF_TZ_OFFSET_MINUTES);
+  const hours = pad2(Math.floor(absMinutes / 60));
+  const minutes = pad2(absMinutes % 60);
+  const isoDate = `${dbDate}T00:00:00${sign}${hours}:${minutes}`;
+
+  return {
+    dbDate,
+    isoDate,
+    offsetMinutes: DIFF_TZ_OFFSET_MINUTES,
+  };
+}
+
+function maskIdempotencyKey(key) {
+  if (!key) return null;
+  return createHash('sha256').update(key).digest('hex').slice(0, 16);
+}
+
+async function upsertDailyDiff({ client, userId, date, phase }) {
+  const { rows } = await client.query(
+    `
+      WITH aggregated AS (
+        SELECT
+          $1::uuid AS user_id,
+          $2::date AS date,
+          COUNT(*) AS records,
+          SUM(COALESCE(d.dkcal, 0)) AS sum_dkcal,
+          SUM(COALESCE(d.dp, 0)) AS sum_dp,
+          SUM(COALESCE(d.df, 0)) AS sum_df,
+          SUM(COALESCE(d.dc, 0)) AS sum_dc,
+          SUM(COALESCE((d.details->'legacy_totals'->>'calories')::double precision, 0)) AS legacy_calories,
+          SUM(COALESCE((d.details->'legacy_totals'->>'protein_g')::double precision, 0)) AS legacy_protein,
+          SUM(COALESCE((d.details->'legacy_totals'->>'fat_g')::double precision, 0)) AS legacy_fat,
+          SUM(COALESCE((d.details->'legacy_totals'->>'carbs_g')::double precision, 0)) AS legacy_carbs,
+          SUM(COALESCE((d.details->'shadow_totals'->>'calories')::double precision, COALESCE((d.details->'legacy_totals'->>'calories')::double precision, 0) + COALESCE(d.dkcal::double precision, 0))) AS shadow_calories,
+          SUM(COALESCE((d.details->'shadow_totals'->>'protein_g')::double precision, COALESCE((d.details->'legacy_totals'->>'protein_g')::double precision, 0) + COALESCE(d.dp, 0))) AS shadow_protein,
+          SUM(COALESCE((d.details->'shadow_totals'->>'fat_g')::double precision, COALESCE((d.details->'legacy_totals'->>'fat_g')::double precision, 0) + COALESCE(d.df, 0))) AS shadow_fat,
+          SUM(COALESCE((d.details->'shadow_totals'->>'carbs_g')::double precision, COALESCE((d.details->'legacy_totals'->>'carbs_g')::double precision, 0) + COALESCE(d.dc, 0))) AS shadow_carbs,
+          SUM(COALESCE((d.details->'abs_diff'->>'dkcal')::double precision, ABS(COALESCE(d.dkcal::double precision, 0)))) AS abs_sum_dkcal,
+          SUM(COALESCE((d.details->'abs_diff'->>'dp')::double precision, ABS(COALESCE(d.dp, 0)))) AS abs_sum_dp,
+          SUM(COALESCE((d.details->'abs_diff'->>'df')::double precision, ABS(COALESCE(d.df, 0)))) AS abs_sum_df,
+          SUM(COALESCE((d.details->'abs_diff'->>'dc')::double precision, ABS(COALESCE(d.dc, 0)))) AS abs_sum_dc,
+          MAX(COALESCE((d.details->'abs_diff'->>'dkcal')::double precision, ABS(COALESCE(d.dkcal::double precision, 0)))) AS abs_max_dkcal,
+          MAX(COALESCE((d.details->'abs_diff'->>'dp')::double precision, ABS(COALESCE(d.dp, 0)))) AS abs_max_dp,
+          MAX(COALESCE((d.details->'abs_diff'->>'df')::double precision, ABS(COALESCE(d.df, 0)))) AS abs_max_df,
+          MAX(COALESCE((d.details->'abs_diff'->>'dc')::double precision, ABS(COALESCE(d.dc, 0)))) AS abs_max_dc,
+          percentile_cont(0.95) WITHIN GROUP (ORDER BY ABS(COALESCE(d.dkcal::double precision, 0))) AS p95_abs_dkcal,
+          percentile_cont(0.95) WITHIN GROUP (ORDER BY ABS(COALESCE(d.dp, 0))) AS p95_abs_dp,
+          percentile_cont(0.95) WITHIN GROUP (ORDER BY ABS(COALESCE(d.df, 0))) AS p95_abs_df,
+          percentile_cont(0.95) WITHIN GROUP (ORDER BY ABS(COALESCE(d.dc, 0))) AS p95_abs_dc,
+          SUM(CASE
+                WHEN ABS(COALESCE(d.dkcal::double precision, 0)) > COALESCE((d.details->'thresholds'->>'dkcal')::double precision, 1e9)
+                  THEN 1
+                ELSE 0
+              END) AS dkcal_breaches,
+          SUM(CASE
+                WHEN ABS(COALESCE(d.dp, 0)) > COALESCE((d.details->'thresholds'->>'dp')::double precision, 1e9)
+                  THEN 1
+                ELSE 0
+              END) AS dp_breaches,
+          SUM(CASE
+                WHEN ABS(COALESCE(d.df, 0)) > COALESCE((d.details->'thresholds'->>'df')::double precision, 1e9)
+                  THEN 1
+                ELSE 0
+              END) AS df_breaches,
+          SUM(CASE
+                WHEN ABS(COALESCE(d.dc, 0)) > COALESCE((d.details->'thresholds'->>'dc')::double precision, 1e9)
+                  THEN 1
+                ELSE 0
+              END) AS dc_breaches
+        FROM diffs d
+        WHERE d.level = 'record'
+          AND d.user_id = $1
+          AND d.date = $2::date
+          AND d.phase = $3
+      ), deleted AS (
+        DELETE FROM diffs
+         WHERE phase = $3
+           AND user_id = $1
+           AND date = $2::date
+           AND level = 'day'
+        RETURNING 1
+      ), inserted AS (
+        INSERT INTO diffs
+          (phase, user_id, log_id, date, dkcal, dp, df, dc, rel_p, rel_f, rel_c, level, details)
+        SELECT
+          $3,
+          user_id,
+          NULL,
+          date,
+          ROUND(COALESCE(sum_dkcal, 0))::integer,
+          ROUND(COALESCE(sum_dp, 0)::numeric, 2)::double precision,
+          ROUND(COALESCE(sum_df, 0)::numeric, 2)::double precision,
+          ROUND(COALESCE(sum_dc, 0)::numeric, 2)::double precision,
+          CASE
+            WHEN COALESCE(legacy_protein, 0) = 0 THEN NULL
+            ELSE COALESCE(sum_dp, 0) / NULLIF(legacy_protein, 0)
+          END,
+          CASE
+            WHEN COALESCE(legacy_fat, 0) = 0 THEN NULL
+            ELSE COALESCE(sum_df, 0) / NULLIF(legacy_fat, 0)
+          END,
+          CASE
+            WHEN COALESCE(legacy_carbs, 0) = 0 THEN NULL
+            ELSE COALESCE(sum_dc, 0) / NULLIF(legacy_carbs, 0)
+          END,
+          'day',
+          jsonb_build_object(
+            'record_count', records,
+            'legacy_totals', jsonb_build_object(
+              'calories', COALESCE(legacy_calories, 0),
+              'protein_g', COALESCE(legacy_protein, 0),
+              'fat_g', COALESCE(legacy_fat, 0),
+              'carbs_g', COALESCE(legacy_carbs, 0)
+            ),
+            'shadow_totals', jsonb_build_object(
+              'calories', COALESCE(shadow_calories, 0),
+              'protein_g', COALESCE(shadow_protein, 0),
+              'fat_g', COALESCE(shadow_fat, 0),
+              'carbs_g', COALESCE(shadow_carbs, 0)
+            ),
+            'abs_diff', jsonb_build_object(
+              'sum', jsonb_build_object(
+                'dkcal', COALESCE(abs_sum_dkcal, 0),
+                'dp', COALESCE(abs_sum_dp, 0),
+                'df', COALESCE(abs_sum_df, 0),
+                'dc', COALESCE(abs_sum_dc, 0)
+              ),
+              'max', jsonb_build_object(
+                'dkcal', COALESCE(abs_max_dkcal, 0),
+                'dp', COALESCE(abs_max_dp, 0),
+                'df', COALESCE(abs_max_df, 0),
+                'dc', COALESCE(abs_max_dc, 0)
+              ),
+              'p95', jsonb_build_object(
+                'dkcal', COALESCE(p95_abs_dkcal, 0),
+                'dp', COALESCE(p95_abs_dp, 0),
+                'df', COALESCE(p95_abs_df, 0),
+                'dc', COALESCE(p95_abs_dc, 0)
+              )
+            ),
+            'breaches', jsonb_build_object(
+              'dkcal', COALESCE(dkcal_breaches, 0),
+              'dp', COALESCE(dp_breaches, 0),
+              'df', COALESCE(df_breaches, 0),
+              'dc', COALESCE(dc_breaches, 0)
+            ),
+            'generated_at', now()
+          )
+        FROM aggregated
+        WHERE records > 0
+        RETURNING *
+      )
+      SELECT * FROM inserted;
+    `,
+    [userId, date, phase],
+  );
+  if (rows.length === 0) {
+    return null;
+  }
+  return rows[0];
+}
+
 async function reserveIdempotency({ req, userId, files, pool }) {
   const client = await pool.connect();
   const headerKey = req.get('Idempotency-Key');
@@ -234,7 +444,11 @@ async function writeShadowAndDiff({
   if (process.env.NORMALIZE_V2_SHADOW !== '1') return;
   if (!shadowResult) return;
 
+  const phase = process.env.NORMALIZE_V2_PHASE || 'P0';
   const endTimer = shadowWriteDuration.startTimer();
+  const consumedAtIso = consumedAt ? new Date(consumedAt).toISOString() : null;
+  const diffDateInfo = computeDiffDate(consumedAt);
+  const diffDateValue = diffDateInfo.dbDate;
 
   const totalsNew = shadowResult?.nutrition || {};
   const caloriesNew = Number(totalsNew.calories ?? 0);
@@ -311,13 +525,63 @@ async function writeShadowAndDiff({
       ],
     );
 
+    const limits = diffThresholds(legacyTotals);
+
+    const absoluteDiffs = {
+      dkcal: diffCalories,
+      dp: diffProtein,
+      df: diffFat,
+      dc: diffCarbs,
+    };
+    Object.entries(absoluteDiffs).forEach(([field, value]) => {
+      if (Number.isFinite(value)) {
+        diffAbsoluteHistogram.labels(field).observe(Math.abs(value));
+      }
+    });
+
+    const relativeDiffs = {
+      rel_p: relProtein,
+      rel_f: relFat,
+      rel_c: relCarbs,
+    };
+    Object.entries(relativeDiffs).forEach(([field, value]) => {
+      if (value !== null && Number.isFinite(value)) {
+        diffRelativeHistogram.labels(field).observe(Math.abs(value));
+      }
+    });
+
     const diffDetails = {
       warnings: shadowWarnings,
       coverage: shadowResult?.coverage ?? null,
-      idempotency_key: idempotencyKey,
+      slot: slotValue,
+      event: eventValue,
+      legacy_totals: {
+        calories: caloriesLegacy,
+        protein_g: proteinLegacy,
+        fat_g: fatLegacy,
+        carbs_g: carbsLegacy,
+      },
+      shadow_totals: {
+        calories: caloriesNew,
+        protein_g: proteinNew,
+        fat_g: fatNew,
+        carbs_g: carbsNew,
+      },
+      abs_diff: {
+        dkcal: Math.abs(diffCalories),
+        dp: Math.abs(diffProtein),
+        df: Math.abs(diffFat),
+        dc: Math.abs(diffCarbs),
+      },
+      rel_diff: {
+        rel_p: relProtein,
+        rel_f: relFat,
+        rel_c: relCarbs,
+      },
+      thresholds: limits,
+      item_count: shadowItems.length,
     };
 
-    const limits = diffThresholds(legacyTotals);
     if (Math.abs(diffCalories) > limits.dkcal) {
       diffBreachCounter.labels('dkcal').inc();
     }
@@ -346,10 +610,10 @@ async function writeShadowAndDiff({
        VALUES
          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'record', $12::jsonb)`,
       [
-        process.env.NORMALIZE_V2_PHASE || 'P0',
+        phase,
         userId,
         logId,
-        consumedAt ? new Date(consumedAt) : new Date(),
+        diffDateValue,
         diffCalories,
         diffProtein,
         diffFat,
@@ -360,6 +624,159 @@ async function writeShadowAndDiff({
         JSON.stringify(diffDetails),
       ],
     );
+
+    const shouldLogDiff =
+      Math.abs(diffCalories) > 0 ||
+      Math.abs(diffProtein) > 0 ||
+      Math.abs(diffFat) > 0 ||
+      Math.abs(diffCarbs) > 0 ||
+      shadowWarnings.length > 0;
+
+    if (shouldLogDiff) {
+      const diffLogEntry = {
+        msg: 'shadow_diff_record',
+        phase,
+        user_id: userId ? String(userId) : null,
+        log_id: logId ? String(logId) : null,
+        consumed_at: consumedAtIso,
+        diff_date: diffDateValue,
+        diff: absoluteDiffs,
+        rel_diff: relativeDiffs,
+        thresholds: limits,
+        warnings: shadowWarnings,
+        coverage: shadowResult?.coverage ?? null,
+        slot: slotValue,
+        event: eventValue,
+        legacy_totals: diffDetails.legacy_totals,
+        shadow_totals: diffDetails.shadow_totals,
+        abs_diff: diffDetails.abs_diff,
+        item_count: shadowItems.length,
+        idempotency_key_hash: maskIdempotencyKey(idempotencyKey),
+        diff_timezone_offset_minutes: diffDateInfo.offsetMinutes,
+      };
+      console.log(JSON.stringify(diffLogEntry));
+    }
+
+    const daySnapshot = await upsertDailyDiff({
+      client: shadowClient,
+      userId,
+      date: diffDateValue,
+      phase,
+    });
+
+    if (daySnapshot) {
+      const dayThresholds = diffThresholds(
+        daySnapshot.details?.legacy_totals || {},
+      );
+      if (dayThresholds) {
+        daySnapshot.details = {
+          ...(daySnapshot.details || {}),
+          thresholds: dayThresholds,
+        };
+        await shadowClient.query(
+          `UPDATE diffs
+              SET details = details || $1::jsonb
+            WHERE id = $2`,
+          [JSON.stringify({ thresholds: dayThresholds }), daySnapshot.id],
+        );
+      }
+
+      const absDaily = {
+        dkcal: Math.abs(daySnapshot.dkcal ?? 0),
+        dp: Math.abs(daySnapshot.dp ?? 0),
+        df: Math.abs(daySnapshot.df ?? 0),
+        dc: Math.abs(daySnapshot.dc ?? 0),
+      };
+      Object.entries(absDaily).forEach(([field, value]) => {
+        if (Number.isFinite(value)) {
+          diffDailyAbsoluteHistogram.labels(field).observe(value);
+        }
+      });
+
+      const relDaily = {
+        rel_p: daySnapshot.rel_p,
+        rel_f: daySnapshot.rel_f,
+        rel_c: daySnapshot.rel_c,
+      };
+      Object.entries(relDaily).forEach(([field, value]) => {
+        if (value === null || value === undefined) return;
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+          diffDailyRelativeHistogram.labels(field).observe(Math.abs(numeric));
+        }
+      });
+
+      const dailyLimits = dayThresholds;
+      if (
+        dailyLimits &&
+        Math.abs(Number(daySnapshot.dkcal ?? 0)) > dailyLimits.dkcal
+      ) {
+        diffDailyBreachCounter.labels('dkcal').inc();
+      }
+      if (
+        dailyLimits &&
+        Math.abs(Number(daySnapshot.dp ?? 0)) > dailyLimits.dp
+      ) {
+        diffDailyBreachCounter.labels('dp').inc();
+      }
+      if (
+        dailyLimits &&
+        Math.abs(Number(daySnapshot.df ?? 0)) > dailyLimits.df
+      ) {
+        diffDailyBreachCounter.labels('df').inc();
+      }
+      if (
+        dailyLimits &&
+        Math.abs(Number(daySnapshot.dc ?? 0)) > dailyLimits.dc
+      ) {
+        diffDailyBreachCounter.labels('dc').inc();
+      }
+      if (
+        dailyLimits &&
+        daySnapshot.rel_p !== null &&
+        daySnapshot.rel_p !== undefined &&
+        Math.abs(Number(daySnapshot.rel_p)) > dailyLimits.rel_p
+      ) {
+        diffDailyBreachCounter.labels('rel_p').inc();
+      }
+      if (
+        dailyLimits &&
+        daySnapshot.rel_f !== null &&
+        daySnapshot.rel_f !== undefined &&
+        Math.abs(Number(daySnapshot.rel_f)) > dailyLimits.rel_f
+      ) {
+        diffDailyBreachCounter.labels('rel_f').inc();
+      }
+      if (
+        dailyLimits &&
+        daySnapshot.rel_c !== null &&
+        daySnapshot.rel_c !== undefined &&
+        Math.abs(Number(daySnapshot.rel_c)) > dailyLimits.rel_c
+      ) {
+        diffDailyBreachCounter.labels('rel_c').inc();
+      }
+
+      console.log(
+        JSON.stringify({
+          msg: 'shadow_diff_daily',
+          phase,
+          user_id: userId ? String(userId) : null,
+          diff_date: diffDateValue,
+          diff_timezone_offset_minutes: diffDateInfo.offsetMinutes,
+          dkcal: daySnapshot.dkcal,
+          dp: daySnapshot.dp,
+          df: daySnapshot.df,
+          dc: daySnapshot.dc,
+          rel_p: daySnapshot.rel_p,
+          rel_f: daySnapshot.rel_f,
+          rel_c: daySnapshot.rel_c,
+          record_count: daySnapshot.details?.record_count ?? null,
+          abs_diff: daySnapshot.details?.abs_diff ?? null,
+          breaches: daySnapshot.details?.breaches ?? null,
+          thresholds: dailyLimits,
+        }),
+      );
+    }
 
     await shadowClient.query('COMMIT');
   } catch (err) {

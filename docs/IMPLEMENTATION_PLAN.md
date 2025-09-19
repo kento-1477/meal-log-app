@@ -8,7 +8,7 @@
 - [x] **Idempotency保存** (2025-09-17): `/log` で Idempotency-Key を解決・`ingest_requests` を確保し、既存ログがある場合は再応答する Idempotent ヒット処理を追加。
 - [x] **Shadow計算** (2025-09-18): `/log` 内で新パイプライン候補を生成し、`meal_logs_v2_shadow` と `diffs` へ書き込み。
 - [x] **CI整備(初期)** (2025-09-18): `scripts/simulate_dual_write.js`・`scripts/check_diffs.js` を実装し、`diff-gate` ワークフローをサンプルfixture付きで有効化。
-- [ ] **Diff算出の高度化**: 日次集計・メトリクス連携・差分ログ出力を実装
+- [x] **Diff算出の高度化** (2025-09-19): 日次集計・メトリクス連携・差分ログ出力を実装
 
 ## Phase 1 — Dual Write & Monitoring
 
