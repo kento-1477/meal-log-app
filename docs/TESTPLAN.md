@@ -14,7 +14,7 @@
 ## 2. Scope
 
 - **Unit**: JSON Schema/limits; guards (skip/portion/set proposals/Atwater/flags); adapters; idempotency calc
-- **Integration**: `/log` dual write; diff calc; shadow persistence
+- **Integration**: `/log` dual write; diff calc; shadow persistence; diff breach metrics（`meal_log_shadow_diff_breach_total` 等）
 - **Golden**: 100 fixed cases; old↔new equivalence within §19 thresholds
 - **E2E**: Playwright journeys（skip・unknown\_\*・set_proposals・edit/undo・delete/restore・report反映）
 - **Perf**: Artillery/k6; capture `normalize_runtime_ms`, token usage, P95 endpoints

@@ -13,7 +13,7 @@
 ## Phase 1 — Dual Write & Monitoring
 
 - [ ] Shadow結果が安定したら Feature Flag `DUAL_WRITE_V2` を有効化（RUNBOOK 手順）
-- [ ] Grafana/Log CLI で `diffs` のP95を可視化
+- [ ] Grafana/Log CLI で `diffs` のP95を可視化（`meal_log_shadow_diff_abs`/`meal_log_shadow_daily_diff_abs` をダッシュボード化）
 - [ ] `docs/TESTPLAN.md` の Integration/Golem ケースを自動化し、CIで常時実行
 
 ## Phase 2 — Dual Read & Visual Regression

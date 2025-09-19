@@ -445,10 +445,12 @@ async function writeShadowAndDiff({
   if (!shadowResult) return;
 
   const phase = process.env.NORMALIZE_V2_PHASE || 'P0';
+  const dualWriteEnabled = process.env.DUAL_WRITE_V2 === '1';
   const endTimer = shadowWriteDuration.startTimer();
   const consumedAtIso = consumedAt ? new Date(consumedAt).toISOString() : null;
   const diffDateInfo = computeDiffDate(consumedAt);
   const diffDateValue = diffDateInfo.dbDate;
+  const normalizedGeneratedAt = new Date().toISOString();
 
   const totalsNew = shadowResult?.nutrition || {};
   const caloriesNew = Number(totalsNew.calories ?? 0);
@@ -495,6 +497,26 @@ async function writeShadowAndDiff({
     fat_g: fatNew,
     carbs_g: carbsNew,
   });
+
+  const normalizedHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        slot: slotValue,
+        event: eventValue,
+        totals: {
+          calories: caloriesNew,
+          protein_g: proteinNew,
+          fat_g: fatNew,
+          carbs_g: carbsNew,
+        },
+        items: shadowItems,
+        warnings: shadowWarnings,
+        coverage: shadowResult?.coverage ?? null,
+        landingType,
+      }),
+    )
+    .digest('hex');
+  const idempotencyKeyHash = maskIdempotencyKey(idempotencyKey);
 
   const shadowClient = await pool.connect();
   try {
@@ -553,6 +575,8 @@ async function writeShadowAndDiff({
     const diffDetails = {
       warnings: shadowWarnings,
       coverage: shadowResult?.coverage ?? null,
+      idempotency_key_hash: idempotencyKeyHash,
+      normalized_hash: normalizedHash,
       slot: slotValue,
       event: eventValue,
       legacy_totals: {
@@ -581,6 +605,41 @@ async function writeShadowAndDiff({
       thresholds: limits,
       item_count: shadowItems.length,
     };
+
+    if (dualWriteEnabled) {
+      const v2MetaPatch = {
+        v2: {
+          hash: normalizedHash,
+          generated_at: normalizedGeneratedAt,
+          idempotency_key_hash: idempotencyKeyHash,
+          slot: slotValue,
+          event: eventValue,
+          coverage: shadowResult?.coverage ?? null,
+          warnings: shadowWarnings,
+        },
+      };
+
+      await shadowClient.query(
+        `UPDATE meal_logs
+            SET slot = $1,
+                event = $2,
+                totals = $3::jsonb,
+                meta = COALESCE(meta, '{}'::jsonb) || $4::jsonb
+          WHERE id = $5
+            AND (
+              meta IS NULL
+              OR (meta->'v2'->>'hash') IS DISTINCT FROM $6
+            )`,
+        [
+          slotValue,
+          eventValue,
+          totalsJson,
+          JSON.stringify(v2MetaPatch),
+          logId,
+          normalizedHash,
+        ],
+      );
+    }
 
     if (Math.abs(diffCalories) > limits.dkcal) {
       diffBreachCounter.labels('dkcal').inc();
@@ -651,7 +710,8 @@ async function writeShadowAndDiff({
         shadow_totals: diffDetails.shadow_totals,
         abs_diff: diffDetails.abs_diff,
         item_count: shadowItems.length,
-        idempotency_key_hash: maskIdempotencyKey(idempotencyKey),
+        idempotency_key_hash: idempotencyKeyHash,
+        normalized_hash: normalizedHash,
         diff_timezone_offset_minutes: diffDateInfo.offsetMinutes,
       };
       console.log(JSON.stringify(diffLogEntry));

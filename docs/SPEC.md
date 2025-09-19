@@ -123,6 +123,7 @@ CREATE INDEX IF NOT EXISTS idx_diffs_user_date ON diffs(user_id, date);
   - しきい値計算は Node の `diffThresholds` を単一のソースとし、SQL側では独自計算をしない。
   - 構造化ログに含める `idempotency_key` はハッシュ値（先頭16桁）を記録し、生値は出力しない。
   - テーブルインデックス：`idx_diffs_level_user_date_phase`（検索最適化）と `diffs_day_unique`（`level='day'` の一意制約）。
+  - Prometheusメトリクス：`meal_log_shadow_diff_abs` / `meal_log_shadow_diff_rel`（レコード粒度）、`meal_log_shadow_daily_diff_abs` / `meal_log_shadow_daily_diff_rel`（日粒度）、および `meal_log_shadow_daily_diff_breach_total` を公開し、Grafana ダッシュボードで参照する。
 
 ### 29.4 Visual Regression 閾値と測定ツール
 

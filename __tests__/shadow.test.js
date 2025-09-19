@@ -1,6 +1,5 @@
 const request = require('supertest');
-
-process.env.NORMALIZE_V2_SHADOW = '1';
+const client = require('prom-client');
 
 const app = require('../server');
 const { pool } = require('../services/db');
@@ -12,17 +11,34 @@ async function truncateAll() {
   );
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForRows(sql, params, minCount = 1, attempts = 20) {
+  for (let i = 0; i < attempts; i++) {
+    const res = await pool.query(sql, params);
+    if (res.rows.length >= minCount) return res.rows;
+    await sleep(25);
+  }
+  throw new Error('Timed out waiting for query rows');
+}
+
 describe('Shadow pipeline writes', () => {
   let userId;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
+    process.env.NORMALIZE_V2_SHADOW = '1';
+    process.env.DUAL_WRITE_V2 = '1';
     await truncateAll();
     userId = await createTestUser();
+    client.register.resetMetrics();
   });
 
   afterAll(async () => {
     await truncateAll();
     delete process.env.NORMALIZE_V2_SHADOW;
+    delete process.env.DUAL_WRITE_V2;
   });
 
   it('writes shadow entry and diff for new log', async () => {
@@ -52,6 +68,25 @@ describe('Shadow pipeline writes', () => {
     expect(shadow.totals).toBeTruthy();
     expect(shadow.meta).toBeTruthy();
 
+    const mealRows = await pool.query(
+      'SELECT slot, event, totals, meta FROM meal_logs WHERE id = $1',
+      [logId],
+    );
+    expect(mealRows.rows).toHaveLength(1);
+    const meal = mealRows.rows[0];
+    expect(meal.slot).toBe('other');
+    expect(meal.event).toBe('eat');
+    expect(meal.totals).toBeTruthy();
+    expect(Number(meal.totals.calories)).toBeCloseTo(
+      Number(shadow.totals.calories),
+      5,
+    );
+    expect(meal.meta?.v2).toBeTruthy();
+    expect(typeof meal.meta.v2.hash).toBe('string');
+    expect(meal.meta.v2.hash.length).toBeGreaterThan(0);
+    expect(typeof meal.meta.v2.idempotency_key_hash).toBe('string');
+    expect(meal.meta.v2.idempotency_key_hash.length).toBeGreaterThan(0);
+
     const diffRows = await pool.query(
       'SELECT phase, level, dkcal, dp, df, dc, rel_p, details FROM diffs WHERE log_id = $1',
       [logId],
@@ -69,6 +104,10 @@ describe('Shadow pipeline writes', () => {
     expect(Number(diff.details.shadow_totals.calories)).toBe(
       Number(shadow.totals.calories),
     );
+    expect(typeof diff.details.idempotency_key_hash).toBe('string');
+    expect(diff.details.idempotency_key_hash.length).toBeGreaterThan(0);
+    expect(typeof diff.details.normalized_hash).toBe('string');
+    expect(diff.details.normalized_hash.length).toBeGreaterThan(0);
     expect(diff.details.thresholds).toBeTruthy();
     const expectedKcalThreshold = Math.max(
       40,
@@ -104,6 +143,42 @@ describe('Shadow pipeline writes', () => {
     expect(Number(day.details.thresholds.dkcal)).toBeCloseTo(
       expectedKcalThreshold,
       5,
+    );
+  });
+
+  it('records diff breach and metrics when normalized totals diverge', async () => {
+    const res = await request(app)
+      .post('/log')
+      .send({ message: 'diff breach special', user_id: userId })
+      .expect(200);
+
+    expect(res.body.idempotent).toBe(false);
+    const logId = res.body.logId;
+
+    const diff = (
+      await waitForRows(
+        'SELECT dkcal, details FROM diffs WHERE log_id = $1 AND level = $2',
+        [logId, 'record'],
+      )
+    )[0];
+    const dkcalAbs = Math.abs(Number(diff.dkcal || 0));
+    const threshold = Number(diff.details?.thresholds?.dkcal || 0);
+    expect(dkcalAbs).toBeGreaterThan(threshold);
+
+    const dayRows = await waitForRows(
+      `SELECT details FROM diffs WHERE user_id = $1 AND level = 'day'`,
+      [userId],
+    );
+    expect(Number(dayRows[0]?.details?.breaches?.dkcal || 0)).toBeGreaterThan(
+      0,
+    );
+
+    const metrics = await request(app).get('/metrics').expect(200);
+    expect(metrics.text).toMatch(
+      /meal_log_shadow_diff_breach_total\{[^}]*field="dkcal"[^}]*}\s+[1-9]\d*(\.\d+)?/,
+    );
+    expect(metrics.text).toMatch(
+      /meal_log_shadow_daily_diff_breach_total\{[^}]*field="dkcal"[^}]*}\s+[1-9]\d*(\.\d+)?/,
     );
   });
 });
