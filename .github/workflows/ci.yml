@@ -77,7 +77,12 @@ jobs:
         run: python -m json.tool observability/grafana/shadow-diff-dashboard.json > /dev/null
 
       - name: Check Prometheus rules
-        run: docker run --rm -v "${{ github.workspace }}":/work -w /work prom/prometheus:v2.53.0 promtool check rules observability/prometheus/*.yml
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}":/work -w /work \
+            --entrypoint /bin/promtool \
+            prom/prometheus:v2.53.0 \
+            check rules observability/prometheus/*.yml
 
       - name: Run DB migrations (test)
         run: npx knex migrate:latest --env test
