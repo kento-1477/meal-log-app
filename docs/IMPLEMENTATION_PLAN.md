@@ -13,14 +13,27 @@
 ## Phase 1 — Dual Write & Monitoring
 
 - [ ] Shadow結果が安定したら Feature Flag `DUAL_WRITE_V2` を有効化（RUNBOOK 手順）
-- [ ] Grafana/Log CLI で `diffs` のP95を可視化（`meal_log_shadow_diff_abs`/`meal_log_shadow_daily_diff_abs` をダッシュボード化）
-- [ ] `docs/TESTPLAN.md` の Integration/Golem ケースを自動化し、CIで常時実行
+  - Decision log: `docs/ops/dual_write_v2_decision.md` (2025-09-20, Go/No-Go = proceed with staged rollout)
+- [x] Grafana/Log CLI で `diffs` のP95を可視化（`meal_log_shadow_diff_abs`/`meal_log_shadow_daily_diff_abs` をダッシュボード化） (2025-09-19): `observability/grafana/shadow-diff-dashboard.json` を Grafana にインポートし、Prometheus ルール `observability/prometheus/shadow-diff-alerts.yml` を Alertmanager に連携
+- [ ] Shadow diff alert/metric baselineを収集し、`observability/prometheus/shadow-diff-alerts.yml` のしきい値を再学習
+  - 2025-09-20: シミュレーションデータで IQR ワークフローをドキュメント化 (`observability/baselines_demo/20250920/`)。本番導入は実データ(2–4週)収集後に実施。
+- [x] CI に `promtool check rules observability/prometheus/shadow-diff-alerts.yml` を追加し、ダッシュボードJSONの整形検証を自動化 (2025-09-20): `.github/workflows/ci.yml` で json.tool + promtool を実行
+- [x] /metrics スモークテストを追加し、CI で `npm run test:golem` と併せて実行 (2025-09-20): `__tests__/metrics.smoke.test.js`
+- [x] `docs/TESTPLAN.md` の Integration/Golem ケースを自動化し、CIで常時実行 (2025-09-20): `npm run test:golem` を GitHub Actions へ追加
 
 ## Phase 2 — Dual Read & Visual Regression
 
 - [ ] DTO Adapter（新→旧）を実装し、`DUAL_READ_V2` フラグで有効化
+  - [x] Spec §29.1 の DTO 差分を洗い出し、adapter module を `services/nutrition/adapters` に追加（2025-09-20, `__tests__/dtoAdapter.test.js`）。
+  - [ ] Feature flag rollout (staging→prod) plan + metrics for diff regression。
+  - [x] Golden fixturesを`fixtures/dual_read/`に生成し、旧DTOとの比較テストを自動化（2025-09-20）。
 - [ ] Playwright Visual Regression テストを追加し、許容差の測定→調整
+  - [ ] Capture baseline screenshots for key journeys (log list, detail, report)。
+  - [ ] Wire Playwright job into CI with threshold `<0.5%` per SPEC §29.4（ハーネスは `tests/visual/` に雛形あり）。
+  - [ ] ブラウザ実行環境（Docker/CI）の準備と差分レポートの保管方法を定義。
 - [ ] 既存クライアント表示が変わらないことをスクリーンショットで確認
+  - TODO: Manual verification checklist + fallback plan documented in RUNBOOK。
+  - TODO: Visual regression の失敗時に旧パイプラインへ戻す手順とSRE通知フローをRUNBOOKに追加。
 
 ## Phase 3 — Cutover & Ops
 

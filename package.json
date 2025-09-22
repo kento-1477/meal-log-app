@@ -13,6 +13,7 @@
     "test:ci-scripts": "node scripts/simulate_dual_write.js fixtures/ci_dual_write.json --write-diffs tmp/diffs.json && node scripts/check_diffs.js tmp/diffs.json",
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
+    "test:visual": "node scripts/run_playwright.js",
     "migrate:make": "knex migrate:make",
     "migrate:rollback": "knex migrate:rollback",
     "migrate:reset": "dotenv -e .env.test -- knex migrate:rollback --all && npm run migrate:test",
@@ -24,7 +25,11 @@
     "seed:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex seed:run'",
     "psql:prod": "npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --",
     "psql:app": "env -u DATABASE_URL npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL\" \"$@\"' --",
-    "postinstall": "PGSSLMODE=require knex migrate:latest && PGSSLMODE=require knex seed:run"
+    "postinstall": "PGSSLMODE=require knex migrate:latest && PGSSLMODE=require knex seed:run",
+    "test:golem": "node scripts/run_golem_checks.js",
+    "metrics:pull": "bash scripts/prometheus/pull_shadow_metrics.sh",
+    "metrics:compute": "python3 scripts/prometheus/compute_shadow_thresholds.py observability/baselines_demo/$(date +%Y%m%d) --out observability/baselines_demo/$(date +%Y%m%d)/baseline_summary_$(date +%Y%m%d).csv",
+    "metrics:baseline": "npm run metrics:pull && npm run metrics:compute"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"

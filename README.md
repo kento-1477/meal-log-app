@@ -12,6 +12,7 @@ Next‑gen food tracking app that lets users log meals by simply chatting or sen
 - [API スキーマ](docs/api/SCHEMA.md) — `item_id` 22文字 base64url などのJSON Schema
 - [ADR](docs/adr) — Atwater方針 / Never‑Zero / Dual Migration の意思決定記録
 - [オペレーションメモ](docs/ops/archive.md) — Shadowテーブルのアーカイブ実行手順
+- [Observability](observability/README.md) — Grafana/Prometheus assets & pulling scripts
 
 ---
 
@@ -203,6 +204,9 @@ for i in {1..60}; do docker-compose exec -T test_db pg_isready -U test_user -d t
 npm run migrate:latest
 PGHOST=127.0.0.1 PGPORT=5433 PGUSER=test_user PGPASSWORD=test_password PGDATABASE=test_meal_log_db \
 npm test -- --runInBand
+
+# Diff fixtures (optional / CI parity)
+npm run test:golem
 
 ENV keys
 

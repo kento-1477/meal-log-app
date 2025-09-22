@@ -72,6 +72,21 @@ function b64ToUuid(s: string): UUID {
 ```
 
 - **Adapter層**：`services/nutrition/index.js` の既存ロジック（`computeFromItems` 等）は **ID非依存のまま温存**。新パイプラインの保存直前に `assignItemIds(items)` を挿入してIDを付与。旧パスから読む場合は DTO Adapter が `item_id` を**必ず**付与して返す（IDが無い既存行は移行時に一括採番 or 返却時オンザフライ）。
+- **Mapping (shadow→legacy)**：`services/nutrition/adapters/dtoAdapter.js` が以下の射影を実施し、`fixtures/dual_read/cases.json` のゴールデンで担保する。
+
+| Shadow DTO path                                | Legacy response path                   | Notes                                                                                     |
+| ---------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `dish`                                         | `dish`                                 | 空なら `'食事'` を返す                                                                    |
+| `confidence` または `meta.confidence`          | `confidence`                           | 欠損時は `0.6`                                                                            |
+| `nutrition.{protein_g,fat_g,carbs_g,calories}` | `nutrition.*`                          | Number coercion; 欠損は `0`                                                               |
+| `breakdown.items[*]` (`qty_g`/`grams` 等)      | `breakdown.items[*]` (`grams`)         | `item_id` を Base64URL(22桁, UUIDv4整形) で保証、`pending`/`source`/`note` 等はパススルー |
+| `breakdown.warnings`                           | `breakdown.warnings`                   | 存在しない場合は `[]`                                                                     |
+| `breakdown.slots`                              | `breakdown.slots`                      | 任意。存在時のみコピー                                                                    |
+| `coverage`                                     | `meta.coverage` & top-level `coverage` | `coverage` が null の場合は返さない                                                       |
+| `event` / `slot`                               | `meta.event` / `meta.slot`             | 旧レスポンスにはトップレベルで載せず meta に記録                                          |
+| (derived) nutrition totals                     | `atwater.delta`                        | `finalizeTotals` で Atwater 差分 (`delta`) を再計算                                       |
+| `meta.*`                                       | `meta.*`                               | `adapter.version`=`2025-09-20`, `adapter.source='shadow_v2'` を付加                       |
+
 - **API Schema反映**：`/docs/api/SCHEMA.md` を更新（`minLength:22 / maxLength:22 / pattern`）。
 
 ### 29.2 Idempotency キーの実装先と仕様
@@ -123,13 +138,15 @@ CREATE INDEX IF NOT EXISTS idx_diffs_user_date ON diffs(user_id, date);
   - しきい値計算は Node の `diffThresholds` を単一のソースとし、SQL側では独自計算をしない。
   - 構造化ログに含める `idempotency_key` はハッシュ値（先頭16桁）を記録し、生値は出力しない。
   - テーブルインデックス：`idx_diffs_level_user_date_phase`（検索最適化）と `diffs_day_unique`（`level='day'` の一意制約）。
-  - Prometheusメトリクス：`meal_log_shadow_diff_abs` / `meal_log_shadow_diff_rel`（レコード粒度）、`meal_log_shadow_daily_diff_abs` / `meal_log_shadow_daily_diff_rel`（日粒度）、および `meal_log_shadow_daily_diff_breach_total` を公開し、Grafana ダッシュボードで参照する。
+  - Prometheusメトリクス：`meal_log_shadow_diff_abs*_bucket|_count|_sum` / `meal_log_shadow_diff_rel*_bucket|_count|_sum`（レコード粒度）、`meal_log_shadow_daily_diff_abs*_bucket|_count|_sum` / `meal_log_shadow_daily_diff_rel*_bucket|_count|_sum`（日粒度）、および `meal_log_shadow_diff_breach_total` / `meal_log_shadow_daily_diff_breach_total` を公開。ラベルは `field`（dkcal|dp|df|dc|rel\_\*）のみを明示設定し、`env` / `shadow_version` / `ai_provider` は `register.setDefaultLabels()` で共通付与する。アプリ/モデルのバージョンは `meal_log_app_build_info` Gauge（ラベル: `app_version`,`model`）で表現する。Grafana/Alert は `_bucket` 系列を `histogram_quantile()` で参照し、集約時は `env` もグルーピングする。
 
 ### 29.4 Visual Regression 閾値と測定ツール
 
 - **ツール**：Playwright `toHaveScreenshot()` + `pixelmatch`。
 - **初期閾値**：`maxDiffRatio = 0.005`（0.5%） **または** `maxPixelDiff = 120` の**小さい方**。フォント/カーソル等は `mask` と `caret: 'hide'` で安定化。
 - **調整方針**：Phase2の**最初の1週間**で実測を収集し、0.2–0.5%に再設定。ベースライン更新は **Approve付きPR** のみ。
+- **Adapter TODO**: `services/nutrition/adapters/dtoAdapter.js` で v2 DTO→legacy をマッピングし、`DUAL_READ_V2` フラグ配下でレスポンス書き換え。Spec §29.1 に差分表を追加し、adapter ロジックとテストケース（golden fixtures）を明記。
+- **Playwright TODO**: `tests/visual/` 配下に baseline shots を格納し、`@playwright/test` 導入後 `npm run test:visual` を CI に組み込む。
 
 ### 29.5 運用自動化：`/docs/ops/archive.md` を追加
 

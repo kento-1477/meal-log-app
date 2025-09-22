@@ -30,6 +30,34 @@
   - main: E2E full, visual regression, diff report as artifact
   - Nightly: perf+cost (1h), trend report
   - Phase gate: full suite + 2h soak
+  - ci-test (push/pr): `.github/workflows/ci.yml` runs `npm test --if-present` with `GEMINI_MOCK=1` so `__tests__/shadow.test.js` and `__tests__/healthz.test.js` gate dual-write metrics
+  - diff-gate (PR): `.github/workflows/diff-gate.yml` executes `scripts/simulate_dual_write.js` + `scripts/check_diffs.js` with fixtures
+  - Observability lint (todo): `promtool check rules observability/prometheus/shadow-diff-alerts.yml` とダッシュボード JSON フォーマット検証を CI に追加
+  - Observability baselines: load `observability/prometheus/shadow-diff-recording-rules.yml` in Prometheus for P50/P90/P95 tracking
+  - Metrics smoke: `__tests__/metrics.smoke.test.js` ensures `/metrics` exposes default labels + build info
+  - Visual regression: Playwright harness (`tests/visual/`, `playwright.config.js`) — install `@playwright/test` locally and run `npx playwright test` with `PLAYWRIGHT_BASE_URL` when baselines are ready.
+
+### Local Test Database Setup
+
+- Use `.env.test` (postgres/postgres@127.0.0.1:5433) for Jest/Knex.
+- Provision the Docker test DB with `.env.db-test` and `docker-compose.override.yml` (binds volume `pgdata`).
+- Commands:
+  ```bash
+  docker compose --env-file .env.db-test down -v
+  docker compose --env-file .env.db-test up -d test_db
+  until docker compose --env-file .env.db-test exec -T test_db pg_isready -U postgres -d test_meal_log_db -h localhost -p 5432; do sleep 1; done
+  docker compose --env-file .env.db-test exec -e PGPASSWORD=postgres -T test_db \
+    psql -U postgres -d test_meal_log_db -c "SELECT current_user, current_database();"
+  npm test
+  ```
+- Clean up with `docker compose --env-file .env.db-test down -v` after the suite.
+- Pure unit suites（例: `__tests__/dtoAdapter.test.js`）を走らせる場合は `SKIP_DB=1` を指定すると `globalSetup` が DB を起動しない。
+
+### Integration/Golem Automation
+
+- Fixtures: `fixtures/ci_dual_write.json`, `fixtures/100_cases.json`, `fixtures/ci_dual_write_fail.json`.
+- CI: `npm run test:golem` (runs simulate + check_diffs, ensures breach detection).
+- Implementation plan updated (2025-09-20).
 
 ## 4. Quality Bars
 

@@ -12,7 +12,41 @@ const reminderRoutes = require('./services/reminders');
 const { analyze, computeFromItems } = require('./services/nutrition');
 // const { LogItemSchema } = require('./schemas/logItem');
 const client = require('prom-client');
+const { register } = client;
+const { version: APP_VERSION } = require('./package.json');
 const { aiRawParseFail, chooseSlotMismatch } = require('./metrics/aiRaw');
+
+const METRIC_ENV =
+  process.env.METRIC_ENV ||
+  (process.env.NODE_ENV === 'production'
+    ? 'prod'
+    : process.env.NODE_ENV || 'local');
+const SHADOW_PIPELINE_VERSION =
+  process.env.SHADOW_PIPELINE_VERSION ||
+  process.env.NORMALIZE_V2_VERSION ||
+  'v2';
+const METRIC_AI_PROVIDER =
+  process.env.GEMINI_MOCK === '1'
+    ? 'gemini-mock'
+    : process.env.AI_PROVIDER || process.env.NUTRITION_PROVIDER || 'gemini';
+const METRIC_MODEL =
+  process.env.GEMINI_MODEL ||
+  process.env.GENERATIVE_MODEL ||
+  'gemini-1.5-flash';
+
+register.setDefaultLabels({
+  env: METRIC_ENV,
+  shadow_version: SHADOW_PIPELINE_VERSION,
+  ai_provider: METRIC_AI_PROVIDER,
+});
+
+const appInfoGauge = new client.Gauge({
+  name: 'meal_log_app_build_info',
+  help: 'Build metadata for meal log shadow pipeline',
+  labelNames: ['app_version', 'model'],
+});
+appInfoGauge.labels(APP_VERSION, METRIC_MODEL).set(1);
+
 const idempotencyCounter = new client.Counter({
   name: 'meal_log_idempotency_total',
   help: 'Idempotency outcomes for /log requests',
