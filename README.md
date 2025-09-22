@@ -1,5 +1,5 @@
 # ️ Meal‑Log App
-
+#テスト用編集
 Next‑gen food tracking app that lets users log meals by simply chatting or sending a photo. The backend analyses the image/text, estimates calories & PFC (Protein/Fat/Carbs), and stores the record in PostgreSQL so users can view daily/weekly reports.
 
 ---
