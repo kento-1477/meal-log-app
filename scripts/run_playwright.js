@@ -3,7 +3,7 @@ const { spawnSync } = require('child_process');
 
 try {
   require.resolve('@playwright/test');
-} catch (err) {
+} catch (_err) {
   console.error('\n[@meal-log] Playwright dependency not found.');
   console.error(
     'Run: npm install -D @playwright/test && npx playwright install --with-deps',
