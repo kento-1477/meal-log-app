@@ -79,6 +79,7 @@
   },
   "jest": {
     "testPathIgnorePatterns": [
+      "<rootDir>/tests/visual/",
       "reminders\\.cron\\.test\\.js$",
       "server\\.test\\.js$"
     ],
