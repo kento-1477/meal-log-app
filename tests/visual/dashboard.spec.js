@@ -3,7 +3,7 @@ let shouldSkip = false;
 
 try {
   // Playwright ランナーでのみ存在
-  ({ test, expect } = require(' @playwright/test'));
+  ({ test, expect } = require('@playwright/test'));
 } catch (_err) {
   // Jest実行時など module が無い場合は以降をスキップ
   shouldSkip = true;
