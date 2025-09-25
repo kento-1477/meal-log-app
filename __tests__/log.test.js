@@ -22,7 +22,7 @@ const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db'); // poolを直接インポート
 
-const describeIfDb = global.describeIfDb || describe;
+const describeIfDb = require('../tests/describeIfDb');
 
 describeIfDb('/log Endpoint Integration Tests', () => {
   let userId; // テスト間で共有するユーザーID

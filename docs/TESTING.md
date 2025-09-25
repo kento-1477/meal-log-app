@@ -7,7 +7,9 @@
   - Use this fast path for everyday development when you do not need a real database.
 - `npm run test:db:prep`
   - Invokes `knex` to rollback all test migrations, re-apply them, and run seeds in the `.env.test` environment.
+
   - Ensures a clean and up-to-date schema before executing DB-backed tests.
+
 - `npm run test:db`
   - Executes Jest with `RUN_DB_TESTS=1`, enabling the DB integration suites (logs, reminders, shadow, server, idempotency, etc.).
   - Assumes `npm run test:db:prep` has been run first.

@@ -26,7 +26,7 @@
 - `scripts/run_playwright.js` の lint (`no-unused-vars`) を修正。
 - CI での `promtool check rules` が失敗しないよう `.github/workflows/ci.yml` を `--entrypoint /bin/promtool` 付きに更新。
 - Jest/Playwright 競合を解消: `jest.config.js` を作成し `tests/visual/` を無視、`tests/visual/dashboard.spec.js` に自己スキップを追加、`package.json` から `jest` ブロックを削除。
-- DB 依存テスト用の `globalThis.describeIfDb` を `tests/jest.setup.js` のトップレベルに移動し、DB 必須スイート（`__tests__/shadow.test.js` ほか）を `describeIfDb` でラップ。
+- `describeIfDb` helper を用意し、DB 必須スイート（`__tests__/shadow.test.js` ほか）でインポートして切り替えるように整備。
 
 ### 4. Shadow Diff Integrity Fixes
 

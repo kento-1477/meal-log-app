@@ -3,7 +3,7 @@ const app = require('../server');
 const { pool } = require('../services/db');
 const { createTestUser } = require('../tests/utils/createTestUser');
 
-const describeIfDb = global.describeIfDb || describe;
+const describeIfDb = require('../tests/describeIfDb');
 
 async function truncateAll() {
   await pool.query(

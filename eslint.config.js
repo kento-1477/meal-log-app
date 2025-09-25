@@ -21,7 +21,6 @@ module.exports = [
       globals: {
         ...globals.node,
         ...globals.jest,
-        describeIfDb: 'readonly',
       },
     },
     settings: {

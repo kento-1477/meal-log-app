@@ -5,7 +5,7 @@ const {
   TEST_USER_ID,
 } = require('../tests/utils/ensureTestUser');
 
-const describeIfDb = global.describeIfDb || describe;
+const describeIfDb = require('../tests/describeIfDb');
 
 function pad(n) {
   return String(n).padStart(2, '0');

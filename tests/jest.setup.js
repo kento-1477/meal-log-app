@@ -2,10 +2,6 @@ jest.setTimeout(15000);
 const { pool } = require('../services/db');
 const client = require('prom-client');
 
-// DBスイートは `RUN_DB_TESTS=1` が明示されたときだけ実行する
-const shouldSkipDb = process.env.RUN_DB_TESTS !== '1';
-globalThis.describeIfDb = shouldSkipDb ? describe.skip : describe;
-
 beforeAll(() => {
   if (process.env.LOG_VERBOSE === '1') return; // 明示時は表示
   jest.spyOn(console, 'log').mockImplementation(() => {});
