@@ -1,0 +1,24 @@
+[
+  {
+    "id": "normal-1",
+    "legacy": { "calories": 600, "protein_g": 25, "fat_g": 18, "carbs_g": 70 },
+    "candidate": {
+      "calories": 610,
+      "protein_g": 26,
+      "fat_g": 19,
+      "carbs_g": 72
+    },
+    "meta": { "phase": "P0", "date": "2025-09-17" }
+  },
+  {
+    "id": "normal-2",
+    "legacy": { "calories": 520, "protein_g": 20, "fat_g": 16, "carbs_g": 58 },
+    "candidate": {
+      "calories": 525,
+      "protein_g": 21,
+      "fat_g": 16.5,
+      "carbs_g": 59
+    },
+    "meta": { "phase": "P0", "date": "2025-09-17" }
+  }
+]

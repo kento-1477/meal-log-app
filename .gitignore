@@ -9,3 +9,11 @@ node_modules/
 !/data/meal_log.csv
 /scripts/db/*
 !/scripts/db/init_app_user.sql
+
+# Playwright artifacts
+playwright-report/
+test-results/
+
+# Real baseline exports should live outside the repo
+observability/baselines/
+observability/baselines_demo/

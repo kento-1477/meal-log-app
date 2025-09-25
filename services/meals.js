@@ -7,7 +7,9 @@ const isAuthenticated = (req, res, next) => {
   // In test environment, mock authentication by checking for a header
   if (process.env.NODE_ENV === 'test') {
     if (req.headers.authorization) {
-      req.user = { id: 1 }; // Mock user
+      const testUserId =
+        process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001';
+      req.user = { id: testUserId }; // Mock user with stable UUID
       return next();
     } else {
       return res.status(401).json({ message: 'Authentication required.' });

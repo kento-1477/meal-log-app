@@ -1,0 +1,24 @@
+name: diff-gate
+
+on:
+  pull_request: {}
+
+jobs:
+  simulate-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (optional)
+        run: |
+          npm run build --if-present
+      - name: Simulate dual write
+        run: |
+          node scripts/simulate_dual_write.js fixtures/100_cases.json --write-diffs tmp/diffs.json
+      - name: Check thresholds
+        run: |
+          node scripts/check_diffs.js tmp/diffs.json

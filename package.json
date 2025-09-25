@@ -9,9 +9,15 @@
   "scripts": {
     "start": "node start.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
-    "test": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:rollback --all && npx dotenv-cli -e .env.test -- npx knex --env test migrate:latest && ENABLE_VOLATILE_SLOTS=0 PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand",
+    "test": "npm run test:unit",
+    "test:unit": "ENABLE_VOLATILE_SLOTS=0 PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand",
+    "test:db:prep": "npm run db:reset && npm run db:setup",
+    "test:db": "RUN_DB_TESTS=1 ENABLE_VOLATILE_SLOTS=0 PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand",
+    "test:all": "npm run test:unit && npm run test:db:prep && npm run test:db",
+    "test:ci-scripts": "node scripts/simulate_dual_write.js fixtures/ci_dual_write.json --write-diffs tmp/diffs.json && node scripts/check_diffs.js tmp/diffs.json",
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",
+    "test:visual": "node scripts/run_playwright.js",
     "migrate:make": "knex migrate:make",
     "migrate:rollback": "knex migrate:rollback",
     "migrate:reset": "dotenv -e .env.test -- knex migrate:rollback --all && npm run migrate:test",
@@ -23,7 +29,15 @@
     "seed:prod": "npx dotenv-cli -e .env.production -- bash -lc 'DATABASE_URL=\"$DATABASE_URL_DIRECT\" npx knex seed:run'",
     "psql:prod": "npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL_DIRECT\" \"$@\"' --",
     "psql:app": "env -u DATABASE_URL npx dotenv-cli -e .env.production -- bash -lc 'psql -d \"$DATABASE_URL\" \"$@\"' --",
-    "postinstall": "PGSSLMODE=require knex migrate:latest && PGSSLMODE=require knex seed:run"
+    "db:reset": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:rollback --all",
+    "db:migrate": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:latest",
+    "db:seed": "npx dotenv-cli -e .env.test -- npx knex --env test seed:run",
+    "db:setup": "npm run db:migrate && npm run db:seed",
+    "postinstall": "echo 'postinstall skipped (no db actions)'",
+    "test:golem": "node scripts/run_golem_checks.js",
+    "metrics:pull": "bash scripts/prometheus/pull_shadow_metrics.sh",
+    "metrics:compute": "python3 scripts/prometheus/compute_shadow_thresholds.py observability/baselines_demo/$(date +%Y%m%d) --out observability/baselines_demo/$(date +%Y%m%d)/baseline_summary_$(date +%Y%m%d).csv",
+    "metrics:baseline": "npm run metrics:pull && npm run metrics:compute"
   },
   "lint-staged": {
     "*.{js,json,css,md}": "prettier --write"
@@ -70,15 +84,5 @@
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "supertest": "^7.1.4"
-  },
-  "jest": {
-    "testPathIgnorePatterns": [
-      "reminders\\.cron\\.test\\.js$",
-      "server\\.test\\.js$"
-    ],
-    "testEnvironment": "node",
-    "setupFilesAfterEnv": [
-      "<rootDir>/tests/jest.setup.js"
-    ]
   }
 }

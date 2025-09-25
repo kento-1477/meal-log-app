@@ -1,0 +1,28 @@
+groups:
+  - name: shadow-diff.recording
+    interval: 5m
+    rules:
+      - record: shadow_diff_record_abs_p50
+        expr: histogram_quantile(0.50, sum by (le, env, field) (rate(meal_log_shadow_diff_abs_bucket[5m])))
+      - record: shadow_diff_record_abs_p90
+        expr: histogram_quantile(0.90, sum by (le, env, field) (rate(meal_log_shadow_diff_abs_bucket[5m])))
+      - record: shadow_diff_record_abs_p95
+        expr: histogram_quantile(0.95, sum by (le, env, field) (rate(meal_log_shadow_diff_abs_bucket[5m])))
+      - record: shadow_diff_record_rel_p95
+        expr: histogram_quantile(0.95, sum by (le, env, field) (rate(meal_log_shadow_diff_rel_bucket[5m])))
+      - record: shadow_diff_record_breach_rate
+        expr: sum by (env, field) (rate(meal_log_shadow_diff_breach_total[5m]))
+
+  - name: shadow-diff.daily-recording
+    interval: 15m
+    rules:
+      - record: shadow_diff_daily_abs_p50
+        expr: histogram_quantile(0.50, sum by (le, env, field) (rate(meal_log_shadow_daily_diff_abs_bucket[15m])))
+      - record: shadow_diff_daily_abs_p90
+        expr: histogram_quantile(0.90, sum by (le, env, field) (rate(meal_log_shadow_daily_diff_abs_bucket[15m])))
+      - record: shadow_diff_daily_abs_p95
+        expr: histogram_quantile(0.95, sum by (le, env, field) (rate(meal_log_shadow_daily_diff_abs_bucket[15m])))
+      - record: shadow_diff_daily_rel_p95
+        expr: histogram_quantile(0.95, sum by (le, env, field) (rate(meal_log_shadow_daily_diff_rel_bucket[15m])))
+      - record: shadow_diff_daily_breach_rate
+        expr: sum by (env, field) (rate(meal_log_shadow_daily_diff_breach_total[15m]))

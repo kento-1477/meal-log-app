@@ -15,7 +15,9 @@ exports.seed = async function (knex) {
         .pipe(csv())
         .on('data', (row) => {
           records.push({
-            user_id: 1, // seed_usersで作成されるダミーユーザーのIDを想定
+            user_id:
+              process.env.TEST_USER_ID ||
+              '00000000-0000-0000-0000-000000000001',
             meal_type: row.meal_type,
             food_item: row.food_item,
             calories: parseFloat(row.calories) || 0,

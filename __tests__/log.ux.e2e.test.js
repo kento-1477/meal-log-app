@@ -3,7 +3,9 @@ const app = require('../server');
 const { pool } = require('../services/db');
 const { createTestUser } = require('../tests/utils/createTestUser');
 
-describe('UX-like integration tests for /log and /log/choose-slot', () => {
+const describeIfDb = require('../tests/describeIfDb');
+
+describeIfDb('UX-like integration tests for /log and /log/choose-slot', () => {
   let userId;
 
   beforeEach(async () => {

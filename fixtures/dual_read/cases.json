@@ -1,0 +1,177 @@
+[
+  {
+    "name": "basic_without_item_ids",
+    "shadow": {
+      "dish": "とんかつ定食",
+      "confidence": 0.82,
+      "nutrition": {
+        "protein_g": 28.2,
+        "fat_g": 19.3,
+        "carbs_g": 65.1,
+        "calories": 623
+      },
+      "breakdown": {
+        "items": [
+          {
+            "code": "pork_cutlet_donburi",
+            "name": "とんかつ",
+            "qty_g": 150,
+            "pending": false,
+            "source": "ai_infer"
+          },
+          {
+            "code": "rice_cooked",
+            "name": "ごはん",
+            "qty_g": 200,
+            "pending": false,
+            "source": "ai_infer"
+          }
+        ],
+        "warnings": ["成分未登録: キャベツ"]
+      },
+      "meta": {
+        "source_kind": "shadow",
+        "fallback_level": 0,
+        "idempotency_key_hash": "abc123hash"
+      },
+      "coverage": {
+        "items": 0.85
+      },
+      "slot": "lunch",
+      "event": "eat"
+    },
+    "expected": {
+      "dish": "とんかつ定食",
+      "confidence": 0.82,
+      "nutrition": {
+        "protein_g": 28.2,
+        "fat_g": 19.3,
+        "carbs_g": 65.1,
+        "calories": 623
+      },
+      "atwater": {
+        "delta": 0.12215088282504016
+      },
+      "breakdown": {
+        "items": [
+          {
+            "item_id": "Alq32OxEQWKFjiACkpUakg",
+            "code": "pork_cutlet_donburi",
+            "name": "とんかつ",
+            "grams": 150,
+            "pending": false,
+            "source": "ai_infer"
+          },
+          {
+            "item_id": "E3bFO5F5TragThw3wqyBSA",
+            "code": "rice_cooked",
+            "name": "ごはん",
+            "grams": 200,
+            "pending": false,
+            "source": "ai_infer"
+          }
+        ],
+        "warnings": ["成分未登録: キャベツ"]
+      },
+      "meta": {
+        "source_kind": "shadow",
+        "fallback_level": 0,
+        "idempotency_key_hash": "abc123hash",
+        "coverage": {
+          "items": 0.85
+        },
+        "slot": "lunch",
+        "event": "eat",
+        "adapter": {
+          "version": "2025-09-20",
+          "source": "shadow_v2"
+        }
+      },
+      "coverage": {
+        "items": 0.85
+      }
+    }
+  },
+  {
+    "name": "preserve_existing_item_ids",
+    "shadow": {
+      "dish": "味噌汁",
+      "meta": {
+        "source_kind": "shadow",
+        "hash": "shadow-hash-xyz"
+      },
+      "nutrition": {
+        "protein_g": 6.4,
+        "fat_g": 4.1,
+        "carbs_g": 12.5,
+        "calories": 135
+      },
+      "breakdown": {
+        "items": [
+          {
+            "item_id": "AAAAAAAAAAAAAAAAAAAAAA",
+            "code": "miso_soup",
+            "grams": 240,
+            "pending": false,
+            "source": "ai_infer"
+          },
+          {
+            "code": "tofu_soft",
+            "name": "豆腐",
+            "qty_g": 80,
+            "pending": false,
+            "source": "ai_infer"
+          }
+        ],
+        "warnings": []
+      },
+      "coverage": null,
+      "event": "eat"
+    },
+    "expected": {
+      "dish": "味噌汁",
+      "confidence": 0.6,
+      "nutrition": {
+        "protein_g": 6.4,
+        "fat_g": 4.1,
+        "carbs_g": 12.5,
+        "calories": 135
+      },
+      "atwater": {
+        "delta": 0.16666666666666666
+      },
+      "breakdown": {
+        "items": [
+          {
+            "item_id": "AAAAAAAAAAAAAAAAAAAAAA",
+            "code": "miso_soup",
+            "name": "miso_soup",
+            "grams": 240,
+            "pending": false,
+            "source": "ai_infer"
+          },
+          {
+            "item_id": "1JwQUh68S02uLqxgSr29Ig",
+            "code": "tofu_soft",
+            "name": "豆腐",
+            "grams": 80,
+            "pending": false,
+            "source": "ai_infer"
+          }
+        ],
+        "warnings": []
+      },
+      "meta": {
+        "source_kind": "shadow",
+        "hash": "shadow-hash-xyz",
+        "slot": "other",
+        "event": "eat",
+        "adapter": {
+          "version": "2025-09-20",
+          "source": "shadow_v2"
+        }
+      },
+      "coverage": null
+    }
+  }
+]

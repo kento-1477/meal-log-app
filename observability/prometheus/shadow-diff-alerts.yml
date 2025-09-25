@@ -1,0 +1,63 @@
+groups:
+  - name: shadow-diff.rules
+    rules:
+      - alert: ShadowDiffBreachBurst
+        expr: sum by (field, env) (increase(meal_log_shadow_diff_breach_total{env="prod"}[15m])) > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: meal-log-app
+          component: nutrition-shadow
+        annotations:
+          summary: "Shadow diff breach burst (record level)"
+          description: |
+            Record-level diff breaches exceeded 5 in the last 15 minutes for {{ $labels.field }}.
+            Investigate the dual-write pipeline; see RUNBOOK §4 and §5.
+      - alert: ShadowDiffDailyBreachBurst
+        expr: sum by (field, env) (increase(meal_log_shadow_daily_diff_breach_total{env="prod"}[1d])) > 10
+        for: 15m
+        labels:
+          severity: critical
+          service: meal-log-app
+          component: nutrition-shadow
+        annotations:
+          summary: "Shadow diff breach burst (daily aggregates)"
+          description: |
+            Daily aggregated breaches exceeded 10 for {{ $labels.field }} within 24 hours.
+            Check diff backlog and recent releases.
+      - alert: ShadowDiffDailyEnergyP95High
+        expr: histogram_quantile(0.95, sum by (le, env) (rate(meal_log_shadow_daily_diff_abs_bucket{field="dkcal", env="prod"}[1h]))) > 80  # TODO recalibrate after real baseline
+        for: 15m
+        labels:
+          severity: warning
+          service: meal-log-app
+          component: nutrition-shadow
+        annotations:
+          summary: "Shadow diff daily kcal P95 high"
+          description: |
+            Daily absolute kcal diff P95 breached 80 kcal for the last hour.
+            Verify DUAL_WRITE_V2 consistency and model regressions.
+      - alert: ShadowDiffDailyMacrosP95High
+        expr: histogram_quantile(0.95, sum by (le, field, env) (rate(meal_log_shadow_daily_diff_abs_bucket{field=~"dp|df|dc", env="prod"}[1h]))) > 15  # TODO recalibrate after real baseline
+        for: 15m
+        labels:
+          severity: warning
+          service: meal-log-app
+          component: nutrition-shadow
+        annotations:
+          summary: "Shadow diff daily macros P95 high"
+          description: |
+            Daily absolute macro diff P95 breached 15g for {{ $labels.field }}.
+            Compare legacy vs shadow outputs and thresholds.
+      - alert: ShadowDiffDailyRelP95High
+        expr: histogram_quantile(0.95, sum by (le, field, env) (rate(meal_log_shadow_daily_diff_rel_bucket{field=~"rel_p|rel_f|rel_c", env="prod"}[1h]))) > 0.18  # TODO recalibrate after real baseline
+        for: 15m
+        labels:
+          severity: warning
+          service: meal-log-app
+          component: nutrition-shadow
+        annotations:
+          summary: "Shadow diff daily relative P95 high"
+          description: |
+            Daily relative diff P95 exceeded 18% for {{ $labels.field }}.
+            Review diff thresholds and upstream nutrition changes.

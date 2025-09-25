@@ -6,7 +6,9 @@ const router = express.Router();
 const isAuthenticated = (req, res, next) => {
   // テスト環境では認証をスキップし、ダミーユーザーを設定
   if (process.env.NODE_ENV === 'test') {
-    req.user = { id: 1 }; // ダミーユーザーID
+    const testUserId =
+      process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001';
+    req.user = { id: testUserId }; // ダミーユーザーID (UUID)
     return next();
   }
   // 実際の認証チェック

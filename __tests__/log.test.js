@@ -10,7 +10,10 @@ jest.mock('../services/auth', () => ({
     next();
   },
   requirePageAuth: (req, res, next) => {
-    req.user = { id: 1, username: 'testuser' };
+    req.user = {
+      id: process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001',
+      username: 'testuser',
+    };
     next();
   },
 }));
@@ -19,7 +22,9 @@ const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db'); // poolを直接インポート
 
-describe('/log Endpoint Integration Tests', () => {
+const describeIfDb = require('../tests/describeIfDb');
+
+describeIfDb('/log Endpoint Integration Tests', () => {
   let userId; // テスト間で共有するユーザーID
 
   beforeEach(async () => {

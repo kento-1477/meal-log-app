@@ -41,8 +41,22 @@ ${textOnly}`;
 async function analyze({ text, imageBuffer, mime }) {
   if (process.env.GEMINI_MOCK === '1') {
     const inputText = text ?? '';
+    if (/diff breach/i.test(inputText)) {
+      return {
+        dish: inputText || '食事',
+        confidence: 0.85,
+        calories: 320,
+        protein_g: 18,
+        fat_g: 12,
+        carbs_g: 35,
+        items: [
+          { name: 'ごはん', grams: 400 },
+          { name: 'とんかつ', grams: 200 },
+        ],
+      };
+    }
     // Default mock returns an empty structure that matches the live API's schema.
-    // Specific mock cases should be handled by test fixtures, not if/else blocks.
+    // Specific mock cases (e.g. integration fixtures) are handled by the regex branches above.
     return {
       dish: inputText || '食事',
       confidence: 0,

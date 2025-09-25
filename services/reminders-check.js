@@ -62,7 +62,7 @@ async function runReminderCheck(pool, now = new Date()) {
             AND n.created_at <  date_trunc('minute', $3::timestamptz) + interval '1 minute'
         )
         `,
-        [r.user.id, finalMessage, now.toISOString()],
+        [r.user_id, finalMessage, now.toISOString()],
       );
     }
 

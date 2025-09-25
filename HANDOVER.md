@@ -1,5 +1,7 @@
 # HANDOVER — Gemini Flash2.5 → Pro2.5 切替
 
+> **Note:** コアとなる食事記録パイプラインやAI正規化仕様は [`docs/SPEC.md`](docs/SPEC.md) と ADR に移管されています。本ドキュメントはモデル切替の運用メモとして維持し、実装判断の際はハブドキュメントを併読してください。
+
 目的: LLMをPro2.5へ切替。重複通知防止・無効化・coaching_level分岐は不変。
 再現: `./scripts/repro.sh` 実行。TZ=UTC、固定時刻でテスト。
 失敗テスト(意図):
