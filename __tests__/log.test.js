@@ -1,4 +1,3 @@
-/* global describeIfDb */
 const { createTestUser } = require('../tests/utils/createTestUser.js');
 const { randomUUID: uuidv4 } = require('crypto');
 
@@ -22,6 +21,8 @@ jest.mock('../services/auth', () => ({
 const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db'); // poolを直接インポート
+
+const describeIfDb = global.describeIfDb || describe;
 
 describeIfDb('/log Endpoint Integration Tests', () => {
   let userId; // テスト間で共有するユーザーID

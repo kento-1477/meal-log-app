@@ -1,7 +1,8 @@
-/* global describeIfDb */
 const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db');
+
+const describeIfDb = global.describeIfDb || describe;
 const {
   ensureTestUser,
   TEST_USER_ID,

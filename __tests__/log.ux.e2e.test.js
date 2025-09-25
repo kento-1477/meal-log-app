@@ -1,8 +1,9 @@
-/* global describeIfDb */
 const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db');
 const { createTestUser } = require('../tests/utils/createTestUser');
+
+const describeIfDb = global.describeIfDb || describe;
 
 describeIfDb('UX-like integration tests for /log and /log/choose-slot', () => {
   let userId;

@@ -1,10 +1,11 @@
-/* global describeIfDb */
 const { runReminderCheck } = require('../server');
 const { pool } = require('../services/db');
 const {
   ensureTestUser,
   TEST_USER_ID,
 } = require('../tests/utils/ensureTestUser');
+
+const describeIfDb = global.describeIfDb || describe;
 
 function pad(n) {
   return String(n).padStart(2, '0');

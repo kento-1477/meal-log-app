@@ -6,6 +6,8 @@ const app = require('../server');
 const { pool } = require('../services/db');
 const { createTestUser } = require('../tests/utils/createTestUser');
 
+const describeIfDb = global.describeIfDb || describe;
+
 async function truncateAll() {
   await pool.query(
     'TRUNCATE TABLE meal_logs_v2_shadow, diffs, ingest_requests, meal_logs, media_assets, users RESTART IDENTITY CASCADE',
