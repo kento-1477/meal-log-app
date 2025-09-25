@@ -1,3 +1,4 @@
+/* global describeIfDb */
 const request = require('supertest');
 const client = require('prom-client');
 

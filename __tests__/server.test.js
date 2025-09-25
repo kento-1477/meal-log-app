@@ -1,3 +1,4 @@
+/* global describeIfDb */
 const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db');

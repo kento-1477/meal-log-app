@@ -1,3 +1,4 @@
+/* global describeIfDb */
 const { createTestUser } = require('../tests/utils/createTestUser.js');
 const { randomUUID: uuidv4 } = require('crypto');
 

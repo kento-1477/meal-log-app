@@ -1,3 +1,4 @@
+/* global describeIfDb */
 const { runReminderCheck } = require('../server');
 const { pool } = require('../services/db');
 const {
