@@ -51,9 +51,9 @@
   npm test
   ```
 - Clean up with `docker compose --env-file .env.db-test down -v` after the suite.
-- **Local quick pass**: `npm run test:unit` → runs migrations + Jest with `SKIP_DB=1`, so DB-backed suites are skipped and feedback stays fast.
-- **Local DB pass**: `npm run test:db` (or `RUN_DB_TESTS=1 npm run test:unit`) → re-runs migrations and executes the DB-backed suites (`describeIfDb`). Use this whenever touching migrations, seeds, services that hit Postgres, or before release.
-- **CI recommendation**: run both jobs — quick (`npm run test:unit`) and full (`npm run test:db` with a Postgres service). Failing either should block merges.
+- **Local quick pass**: `npm run test:unit` skips DB suites entirely and should be your default tight loop.
+- **Local DB pass**: `npm run test:db:prep` followed by `npm run test:db` executes the integration suites. Run this whenever touching migrations, seeds, DB-backed services, or before release.
+- **CI recommendation**: two jobs — quick (`npm run test:unit`) and full (provision Postgres, then `npm run test:db:prep` + `npm run test:db`). Both must pass before merging.
 
 ### Integration/Golem Automation
 

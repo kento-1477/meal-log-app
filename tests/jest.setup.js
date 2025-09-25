@@ -2,11 +2,8 @@ jest.setTimeout(15000);
 const { pool } = require('../services/db');
 const client = require('prom-client');
 
-// --- DBを既定スキップ（CIのみ）。← describe 定義より前（トップレベル）に必要 ---
-if (process.env.RUN_DB_TESTS === '1') {
-  process.env.SKIP_DB = '0';
-}
-const shouldSkipDb = process.env.SKIP_DB === '1';
+// DBスイートは `RUN_DB_TESTS=1` が明示されたときだけ実行する
+const shouldSkipDb = process.env.RUN_DB_TESTS !== '1';
 globalThis.describeIfDb = shouldSkipDb ? describe.skip : describe;
 
 beforeAll(() => {

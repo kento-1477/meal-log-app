@@ -3,37 +3,44 @@
 ## Script overview
 
 - `npm run test:unit`
-  - Runs PostgreSQL migrations against the test DB and executes Jest with `SKIP_DB=1`.
-  - All suites wrapped by `describeIfDb` are skipped; use this fast path for day-to-day feedback.
+  - Runs Jest with `RUN_DB_TESTS` disabled, so any suite wrapped by `describeIfDb` is skipped.
+  - Use this fast path for everyday development when you do not need a real database.
+- `npm run test:db:prep`
+  - Invokes `knex` to rollback all test migrations, re-apply them, and run seeds in the `.env.test` environment.
+  - Ensures a clean and up-to-date schema before executing DB-backed tests.
 - `npm run test:db`
-  - Same migration prep, but forces `RUN_DB_TESTS=1`. DB-backed integration suites (logs, reminders, shadow, server, idempotency) run in full.
-  - Intended for changes that touch migrations, seeds, services with DB access, or pre-release verification.
+  - Executes Jest with `RUN_DB_TESTS=1`, enabling the DB integration suites (logs, reminders, shadow, server, idempotency, etc.).
+  - Assumes `npm run test:db:prep` has been run first.
+- `npm run test:all`
+  - Convenience combo: runs `test:unit`, then `test:db:prep`, then `test:db`.
 
-`npm test` is aliased to `npm run test:unit` to keep the default quick.
+`npm test` is aliased to `npm run test:unit` so the default remains quick.
 
 ## Local workflow
 
 1. Run `npm run test:unit` frequently while iterating.
-2. When changing anything that persists data (migrations, seeds, services/\*, server.js) or before merging, run `npm run test:db` locally to catch FK/migration issues early.
+2. When touching migrations, seeds, or Postgres-backed services—or before merging—run `npm run test:db:prep` followed by `npm run test:db` to catch schema/data issues early.
 
 ## CI workflow
 
 - Add two jobs:
   1. **unit** – execute `npm run test:unit`.
-  2. **db** – spin up Postgres (e.g., docker service) and execute `npm run test:db`.
-- Require both jobs to pass before merging; the db lane protects against “passes in unit mode, fails with real DB” regressions.
+  2. **db** – provision Postgres, run `npm run test:db:prep`, then `npm run test:db`.
+- Require both jobs to succeed before merging; the DB lane prevents “passes locally, fails with real DB” regressions.
 
 ## Optional developer safeguards
 
-- Consider a pre-push hook or lint rule that flags when migrations/seeds/services are touched without running `npm run test:db`.
-- If `RUN_DB_TESTS` is set, the guard in `tests/jest.setup.js` automatically re-enables DB suites; otherwise they stay skipped via `describeIfDb`.
+- Consider a pre-push hook or lint rule that flags migrations/seeds/service changes when `npm run test:db:prep && npm run test:db` has not been executed.
+- `tests/jest.setup.js` only enables `describeIfDb` suites when `RUN_DB_TESTS=1`, so forgetting the DB pass means those suites silently skip.
 
 ## Pre-push reminder (optional)
 
 Integrate a simple git hook to avoid forgetting the DB pass:
 
-    git diff --cached --name-only | grep -E '^(migrations|seeds|services/.+|server.js)' >/dev/null && {
-      echo "⚠️  DB-impacting change detected. Run 'npm run test:db' before pushing." && exit 1
-    } || exit 0
+```
+git diff --cached --name-only | grep -E '^(migrations|seeds|services/.+|server.js)' >/dev/null && {
+  echo "⚠️  DB-impacting change detected. Run 'npm run test:db:prep && npm run test:db' before pushing." && exit 1
+} || exit 0
+```
 
 Drop this snippet into `.husky/pre-push` or your preferred hook runner.

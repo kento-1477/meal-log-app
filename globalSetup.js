@@ -1,7 +1,7 @@
 const { execSync } = require('child_process');
 const { Client } = require('pg');
 
-if (process.env.SKIP_DB === '1') {
+if (process.env.SKIP_DB === '1' || process.env.RUN_DB_TESTS !== '1') {
   module.exports = async () => {};
 } else {
   const host = process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost';
