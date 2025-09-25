@@ -5,4 +5,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/tests/jest.setup.js'],
   testMatch: ['**/__tests__/**/*.test.js'],
   globalSetup: '<rootDir>/globalSetup.js',
+  globals: {
+    describeIfDb: 'readonly',
+  },
 };
