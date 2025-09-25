@@ -9,7 +9,9 @@
   "scripts": {
     "start": "node start.js",
     "changelog": "conventional-changelog -p angular -i app_summary_and_log.md -s -r 0",
-    "test": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:rollback --all && npx dotenv-cli -e .env.test -- npx knex --env test migrate:latest && ENABLE_VOLATILE_SLOTS=0 PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand",
+    "test": "npm run test:unit",
+    "test:unit": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:rollback --all && npx dotenv-cli -e .env.test -- npx knex --env test migrate:latest && npx dotenv-cli -e .env.test -- bash -lc 'SKIP_DB=1 ENABLE_VOLATILE_SLOTS=0 PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand'",
+    "test:db": "npx dotenv-cli -e .env.test -- npx knex --env test migrate:rollback --all && npx dotenv-cli -e .env.test -- npx knex --env test migrate:latest && npx dotenv-cli -e .env.test -- bash -lc 'SKIP_DB=1 RUN_DB_TESTS=1 ENABLE_VOLATILE_SLOTS=0 PGSSLMODE=disable NODE_ENV=test ENABLE_CRON=false GEMINI_MOCK=1 jest --runInBand'",
     "test:ci-scripts": "node scripts/simulate_dual_write.js fixtures/ci_dual_write.json --write-diffs tmp/diffs.json && node scripts/check_diffs.js tmp/diffs.json",
     "lint": "eslint . --max-warnings=0",
     "dev": "nodemon start.js",

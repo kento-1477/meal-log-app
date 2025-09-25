@@ -51,7 +51,9 @@
   npm test
   ```
 - Clean up with `docker compose --env-file .env.db-test down -v` after the suite.
-- Pure unit suites（例: `__tests__/dtoAdapter.test.js`）を走らせる場合は `SKIP_DB=1` を指定すると `globalSetup` が DB を起動しない。
+- **Local quick pass**: `npm run test:unit` → runs migrations + Jest with `SKIP_DB=1`, so DB-backed suites are skipped and feedback stays fast.
+- **Local DB pass**: `npm run test:db` (or `RUN_DB_TESTS=1 npm run test:unit`) → re-runs migrations and executes the DB-backed suites (`describeIfDb`). Use this whenever touching migrations, seeds, services that hit Postgres, or before release.
+- **CI recommendation**: run both jobs — quick (`npm run test:unit`) and full (`npm run test:db` with a Postgres service). Failing either should block merges.
 
 ### Integration/Golem Automation
 

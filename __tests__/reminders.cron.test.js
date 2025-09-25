@@ -1,5 +1,9 @@
 const { runReminderCheck } = require('../server');
 const { pool } = require('../services/db');
+const {
+  ensureTestUser,
+  TEST_USER_ID,
+} = require('../tests/utils/ensureTestUser');
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -11,11 +15,12 @@ function weekdayEnLower(now) {
   return now.toLocaleString('en-US', { weekday: 'long' }).toLowerCase();
 }
 
-describe('Reminder Cron Job', () => {
+describeIfDb('Reminder Cron Job', () => {
   beforeEach(async () => {
     await pool.query(
       'TRUNCATE notifications, reminder_settings, user_preferences RESTART IDENTITY CASCADE',
     );
+    await ensureTestUser();
   });
 
   test('should create only one notification per minute for the same reminder', async () => {
@@ -28,7 +33,7 @@ describe('Reminder Cron Job', () => {
        (user_id, reminder_name, notification_time, days_of_week, is_enabled, message)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
-        1,
+        TEST_USER_ID,
         'Test Reminder',
         currentTime,
         JSON.stringify([currentDay]),
@@ -42,7 +47,7 @@ describe('Reminder Cron Job', () => {
 
     const { rows } = await pool.query(
       'SELECT * FROM notifications WHERE user_id = $1',
-      [1],
+      [TEST_USER_ID],
     );
     expect(rows.length).toBe(1);
     expect(rows[0].message).toMatch(/Time to eat!/);
@@ -58,7 +63,7 @@ describe('Reminder Cron Job', () => {
        (user_id, reminder_name, notification_time, days_of_week, is_enabled, message)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
-        1,
+        TEST_USER_ID,
         'Coaching Reminder',
         currentTime,
         JSON.stringify([currentDay]),
@@ -71,7 +76,7 @@ describe('Reminder Cron Job', () => {
     await runReminderCheck(pool, now);
     let { rows } = await pool.query(
       'SELECT message FROM notifications WHERE user_id = $1',
-      [1],
+      [TEST_USER_ID],
     );
     expect(rows.length).toBe(1);
     expect(rows[0].message).toMatch(/^\[Gentle\] Eat well!/);
@@ -82,12 +87,12 @@ describe('Reminder Cron Job', () => {
       `INSERT INTO user_preferences (user_id, coaching_level)
        VALUES ($1, $2)
        ON CONFLICT (user_id) DO UPDATE SET coaching_level = EXCLUDED.coaching_level`,
-      [1, 'intense'],
+      [TEST_USER_ID, 'intense'],
     );
     await runReminderCheck(pool, now);
     ({ rows } = await pool.query(
       'SELECT message FROM notifications WHERE user_id = $1',
-      [1],
+      [TEST_USER_ID],
     ));
     expect(rows.length).toBe(1);
     expect(rows[0].message).toMatch(/^\[Intense\] Eat well!/);
@@ -103,7 +108,7 @@ describe('Reminder Cron Job', () => {
        (user_id, reminder_name, notification_time, days_of_week, is_enabled, message)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
-        1,
+        TEST_USER_ID,
         'Disabled Reminder',
         currentTime,
         JSON.stringify([currentDay]),
@@ -116,7 +121,7 @@ describe('Reminder Cron Job', () => {
 
     const { rows } = await pool.query(
       'SELECT * FROM notifications WHERE user_id = $1',
-      [1],
+      [TEST_USER_ID],
     );
     expect(rows.length).toBe(0);
   });

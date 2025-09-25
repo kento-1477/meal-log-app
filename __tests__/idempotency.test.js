@@ -9,7 +9,7 @@ async function truncateAll() {
   );
 }
 
-describe('POST /log idempotency behaviour', () => {
+describeIfDb('POST /log idempotency behaviour', () => {
   let userId;
 
   beforeAll(async () => {

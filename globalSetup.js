@@ -4,25 +4,35 @@ const { Client } = require('pg');
 if (process.env.SKIP_DB === '1') {
   module.exports = async () => {};
 } else {
-  const host = process.env.DB_HOST || 'localhost';
-  const port = process.env.DB_PORT || 5433;
-  const user = process.env.DB_USER || 'test_user';
-  const password = process.env.DB_PASSWORD || 'test_password';
-  const dbName = process.env.DB_DATABASE || 'test_db';
+  const host = process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost';
+  const port = Number(process.env.DB_PORT || process.env.POSTGRES_PORT || 5433);
+  const user = process.env.DB_USER || process.env.POSTGRES_USER || 'test_user';
+  const password =
+    process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'test_password';
+  const dbName =
+    process.env.DB_DATABASE ||
+    process.env.POSTGRES_DB ||
+    process.env.TEST_DB_DATABASE ||
+    'test_meal_log_db';
 
   const connSettings = { host, port, user, password, database: dbName };
 
   const seedData = async (client) => {
     console.log('Seeding initial data for tests...');
-    await client.query(`
-      INSERT INTO users (id, username, email, password_hash) VALUES
-      (1, 'testuser', 'test@example.com', 'password_hash_placeholder')
-      ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username;
-    `);
-    await client.query(`
-      INSERT INTO meal_logs (user_id, meal_type, food_item, calories, consumed_at) VALUES
-      (1, 'Breakfast', 'Test Toast', 200, '2025-07-24T09:00:00Z');
-    `);
+    const seedUserId =
+      process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001';
+    await client.query(
+      `INSERT INTO users (id, username, email, password_hash)
+       VALUES ($1, 'testuser', 'test@example.com', 'password_hash_placeholder')
+       ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username`,
+      [seedUserId],
+    );
+    await client.query(
+      `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, consumed_at)
+       VALUES ($1, 'Breakfast', 'Test Toast', 200, '2025-07-24T09:00:00Z')
+       ON CONFLICT DO NOTHING`,
+      [seedUserId],
+    );
     console.log('Database seeding complete.');
   };
 

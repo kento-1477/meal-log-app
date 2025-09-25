@@ -1,6 +1,10 @@
 const request = require('supertest');
 const app = require('../server');
 const { pool } = require('../services/db');
+const {
+  ensureTestUser,
+  TEST_USER_ID,
+} = require('../tests/utils/ensureTestUser');
 
 afterAll(async () => {
   // cronジョブを停止
@@ -9,7 +13,20 @@ afterAll(async () => {
   }
 });
 
-describe('Meal Log API Integration Tests', () => {
+describeIfDb('Meal Log API Integration Tests', () => {
+  beforeEach(async () => {
+    await ensureTestUser();
+    await pool.query('DELETE FROM meal_logs WHERE user_id = $1', [
+      TEST_USER_ID,
+    ]);
+    await pool.query(
+      `INSERT INTO meal_logs (user_id, meal_type, food_item, calories, consumed_at)
+       VALUES ($1, 'Breakfast', 'Test Toast', 200, '2025-07-24T09:00:00Z')
+       ON CONFLICT DO NOTHING`,
+      [TEST_USER_ID],
+    );
+  });
+
   test('GET /api/meals should fail with 401 without authentication', async () => {
     const response = await request(app).get('/api/meals');
     expect(response.statusCode).toBe(401);
@@ -28,7 +45,7 @@ describe('Meal Log API Integration Tests', () => {
       (meal) => meal.food_item === 'Test Toast',
     );
     expect(testMeal).toBeDefined();
-    expect(testMeal.calories).toBe(200);
+    expect(Number(testMeal.calories)).toBe(200);
     expect(testMeal.meal_type).toBe('Breakfast');
   });
 
@@ -55,6 +72,6 @@ describe('Meal Log API Integration Tests', () => {
       ['Test Salad'],
     );
     expect(dbResult.rows.length).toBe(1);
-    expect(dbResult.rows[0].calories).toBe(350);
+    expect(Number(dbResult.rows[0].calories)).toBe(350);
   });
 });

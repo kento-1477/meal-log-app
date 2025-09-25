@@ -9,6 +9,7 @@ const pgSession = require('connect-pg-simple')(session);
 const { pool } = require('./services/db');
 const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
+const { runReminderCheck } = require('./services/reminders-check');
 const { analyze, computeFromItems } = require('./services/nutrition');
 // const { LogItemSchema } = require('./schemas/logItem');
 const client = require('prom-client');
@@ -497,10 +498,17 @@ async function writeShadowAndDiff({
   const fatLegacy = Number(legacyTotals?.fat_g ?? 0);
   const carbsLegacy = Number(legacyTotals?.carbs_g ?? 0);
 
-  const diffCalories = Math.round(caloriesNew - caloriesLegacy);
-  const diffProtein = proteinNew - proteinLegacy;
-  const diffFat = fatNew - fatLegacy;
-  const diffCarbs = carbsNew - carbsLegacy;
+  const num = (v) => (Number.isFinite(+v) ? +v : 0);
+
+  const dkcalRaw = num(caloriesNew) - num(caloriesLegacy);
+  const dpRaw = num(proteinNew) - num(proteinLegacy);
+  const dfRaw = num(fatNew) - num(fatLegacy);
+  const dcRaw = num(carbsNew) - num(carbsLegacy);
+
+  const diffCalories = Number(dkcalRaw.toFixed(6));
+  const diffProtein = Number(dpRaw.toFixed(6));
+  const diffFat = Number(dfRaw.toFixed(6));
+  const diffCarbs = Number(dcRaw.toFixed(6));
 
   const rel = (diff, legacy) =>
     legacy === 0 ? null : diff === 0 ? 0 : diff / legacy;
@@ -992,11 +1000,13 @@ async function requireApiAuth(req, res, next) {
     const hdr = req.headers['x-test-user-id'];
     const qid = req.query.user_id;
     const bid = req.body && req.body.user_id;
+    const fallback =
+      process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001';
     const uid =
       (typeof bid === 'string' && bid) ||
       (typeof qid === 'string' && qid) ||
       (typeof hdr === 'string' && hdr) ||
-      '00000000-0000-0000-0000-000000000000';
+      fallback;
     req.user = { id: uid, email: 'test@example.com' };
     return next();
   }
@@ -1004,13 +1014,19 @@ async function requireApiAuth(req, res, next) {
     return next();
   }
   // Temporarily bypass guest user creation to debug pool.query issue
-  req.user = { id: '00000000-0000-0000-0000-000000000000', is_guest: true }; // Use a fixed guest ID
+  req.user = {
+    id: process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001',
+    is_guest: true,
+  }; // Use a fixed guest ID
   return next();
 }
 
 function requirePageAuth(req, res, next) {
   if (process.env.NODE_ENV === 'test') {
-    req.user = { id: 1, email: 'test@example.com' };
+    req.user = {
+      id: process.env.TEST_USER_ID || '00000000-0000-0000-0000-000000000001',
+      email: 'test@example.com',
+    };
     return next();
   }
   if (req.isAuthenticated()) {
@@ -1669,6 +1685,7 @@ app.use((err, req, res, next) => {
 });
 
 module.exports = app;
+module.exports.runReminderCheck = runReminderCheck;
 
 if (require.main === module && process.env.NODE_ENV !== 'test') {
   console.warn(

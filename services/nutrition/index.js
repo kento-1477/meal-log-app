@@ -6,6 +6,45 @@ const { resolveNames } = require('./nameResolver');
 const { finalizeTotals } = require('./policy.js');
 const { makeMeta, deriveMetaFromLegacy } = require('./meta');
 
+const IS_TEST = process.env.NODE_ENV === 'test' || process.env.CI === '1';
+const LOG_VERBOSE = process.env.LOG_VERBOSE === '1';
+
+function pickConfidence(...candidates) {
+  for (const candidate of candidates) {
+    if (
+      typeof candidate === 'number' &&
+      Number.isFinite(candidate) &&
+      candidate > 0
+    ) {
+      return candidate;
+    }
+  }
+  return 0.6;
+}
+
+function safeLog(prefix, payload) {
+  // Jest/CIは既定で抑止（必要なときだけ LOG_VERBOSE=1 で出す）
+  if (IS_TEST && !LOG_VERBOSE) return;
+  try {
+    if (payload === undefined) {
+      console.log(String(prefix));
+    } else if (typeof payload === 'string') {
+      console.log(`${prefix}${payload}`);
+    } else {
+      // 循環参照でも落ちないようにJSON化を最小限に
+      console.log(
+        `${prefix}${JSON.stringify(payload, (_k, v) => {
+          // BigInt など toString に逃がす
+          if (typeof v === 'bigint') return v.toString();
+          return v;
+        })}`,
+      );
+    }
+  } catch (_e) {
+    console.log(`${prefix}[unserializable]`);
+  }
+}
+
 /**
  * Checks if at least one item in the array has a usable gram value.
  * Mirrors the logic of getGrams() in computeFromItems.js for consistency.
@@ -34,17 +73,14 @@ async function realAnalyze(input) {
 
   if (aiEnabled && useGemini) {
     try {
-      console.log('Attempting analysis with Gemini...');
+      safeLog('Attempting analysis with Gemini...');
       return await geminiProvider.analyze(input); // GEMINI_MOCK=1 ならモックが返る
     } catch (_error) {
-      console.error(
-        'Gemini analysis failed, falling back to deterministic.',
-        _error,
-      );
+      safeLog('Gemini analysis failed, falling back to deterministic.', _error);
       throw _error;
     }
   }
-  console.log('AI analysis is not enabled or provider is not Gemini.');
+  safeLog('AI analysis is not enabled or provider is not Gemini.');
   throw new Error('AI not configured');
 }
 
@@ -57,49 +93,13 @@ async function analyze(input) {
     // If AI provider itself fails, set a default empty structure
     aiResult = {
       dish: input.text || '食事',
-      confidence: 0,
       items: [],
       meta: makeMeta({ source_kind: 'ai', fallback_level: 0, error: true }),
     };
   }
 
-  if (aiResult?.labelNutrition?.perServing) {
-    const t = aiResult.labelNutrition.perServing;
-    const { total, atwater } = finalizeTotals({
-      P: t.P,
-      F: t.F,
-      C: t.C,
-      kcal: t.kcal,
-    });
-    return {
-      dish: aiResult.dish,
-      confidence: 1.0,
-      source: 'label',
-      nutrition: {
-        protein_g: total.P,
-        fat_g: total.F,
-        carbs_g: total.C,
-        calories: total.kcal,
-      },
-      atwater,
-      breakdown: {
-        items: [
-          {
-            name: '栄養成分表示(1食)',
-            grams: null,
-            source: 'label',
-            pending: false,
-            P: total.P,
-            F: total.F,
-            C: total.C,
-            kcal: total.kcal,
-          },
-        ],
-        slots: [],
-        warnings: [],
-      },
-    };
-  }
+  // Preserve original AI confidence
+  const originalAiConfidence = aiResult.confidence;
 
   if (
     aiResult &&
@@ -109,11 +109,9 @@ async function analyze(input) {
   ) {
     const archetypeResult = findArchetype(input.text);
     if (archetypeResult) {
-      const originalConfidence = aiResult.confidence; // Store original confidence
       aiResult = {
         ...archetypeResult, // Base from archetype
         items: archetypeResult.items, // Ensure archetype's items are used
-        confidence: originalConfidence, // Explicitly set original confidence
         ...aiResult, // Overlay original AI result (meta はここで上書きされる)
         meta: makeMeta({
           // 最後に meta を設定
@@ -122,6 +120,11 @@ async function analyze(input) {
           archetype_id: archetypeResult.archetype_id,
         }),
       };
+      aiResult.confidence ??= pickConfidence(
+        originalAiConfidence,
+        aiResult.confidence,
+        aiResult.base_confidence,
+      );
     } else {
       const text = input.text || '';
       let items = [];
@@ -133,16 +136,26 @@ async function analyze(input) {
       if (items.length) {
         aiResult = {
           dish: text,
-          confidence: aiResult.confidence ?? 0.6,
           items,
           meta: makeMeta({ source_kind: 'template', fallback_level: 1 }),
         };
+        aiResult.confidence ??= pickConfidence(
+          originalAiConfidence,
+          aiResult.confidence,
+          aiResult.base_confidence,
+          0.6,
+        );
       } else {
         aiResult = {
           ...aiResult,
           items: [],
           meta: makeMeta({ source_kind: 'ai', fallback_level: 0 }),
         };
+        aiResult.confidence ??= pickConfidence(
+          originalAiConfidence,
+          aiResult.confidence,
+          aiResult.base_confidence,
+        );
       }
     }
   }
@@ -179,15 +192,20 @@ async function analyze(input) {
     const finalMeta = aiResult.meta || deriveMetaFromLegacy(aiResult);
     const atwater_delta =
       atwater && Number.isFinite(atwater.delta) ? atwater.delta : 0;
-    console.log('[nutrition]', {
+    safeLog('[nutrition]', {
       path,
       fallback_used: (finalMeta.fallback_level ?? 0) > 0,
       atwater_delta,
     });
 
-    return {
+    const result = {
       dish: aiResult.dish,
-      confidence: aiResult.confidence ?? 0.6,
+      confidence: pickConfidence(
+        originalAiConfidence,
+        aiResult.confidence,
+        aiResult.base_confidence,
+      ),
+      base_confidence: aiResult.base_confidence,
       nutrition: {
         protein_g: total.P,
         fat_g: total.F,
@@ -203,6 +221,8 @@ async function analyze(input) {
       },
       meta: finalMeta,
     };
+
+    return result;
   }
 
   // Path: item/template
@@ -244,24 +264,21 @@ async function analyze(input) {
   const slots = buildSlots(normItems, aiResult.meta?.archetype_id);
   const resolvedItems = resolveNames(normItems);
   aiResult.base_confidence = aiResult.base_confidence ?? aiResult.confidence;
-  // 最終防御：0 や undefined を返さない
-  const isNum = (v) => Number.isFinite(v);
-  const finalConfidence = isNum(aiResult.confidence)
-    ? aiResult.confidence
-    : isNum(aiResult.base_confidence)
-      ? aiResult.base_confidence
-      : 0.6;
 
   const finalMeta = aiResult.meta || deriveMetaFromLegacy(aiResult);
-  console.log('[nutrition]', {
+  safeLog('[nutrition]', {
     path,
     fallback_used: (finalMeta.fallback_level ?? 0) > 0,
     atwater_delta: atwater?.delta,
   });
 
-  return {
+  const result = {
     dish: aiResult.dish,
-    confidence: finalConfidence,
+    confidence: pickConfidence(
+      originalAiConfidence,
+      aiResult.confidence,
+      aiResult.base_confidence,
+    ),
     base_confidence: aiResult.base_confidence,
     nutrition: { protein_g: P, fat_g: F, carbs_g: C, calories: kcal },
     atwater,
@@ -273,6 +290,8 @@ async function analyze(input) {
     },
     meta: finalMeta,
   };
+
+  return result;
 }
 
 async function analyzeLegacy(input) {

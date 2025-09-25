@@ -4,4 +4,5 @@ module.exports = {
   testPathIgnorePatterns: ['<rootDir>/tests/visual/'],
   setupFilesAfterEnv: ['<rootDir>/tests/jest.setup.js'],
   testMatch: ['**/__tests__/**/*.test.js'],
+  globalSetup: '<rootDir>/globalSetup.js',
 };

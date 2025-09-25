@@ -24,7 +24,7 @@ async function waitForRows(sql, params, minCount = 1, attempts = 20) {
   throw new Error('Timed out waiting for query rows');
 }
 
-describe('Shadow pipeline writes', () => {
+describeIfDb('Shadow pipeline writes', () => {
   let userId;
 
   beforeEach(async () => {
@@ -57,11 +57,12 @@ describe('Shadow pipeline writes', () => {
     expect(legacyRows.rows).toHaveLength(1);
     const legacyTotals = legacyRows.rows[0];
 
-    const shadowRows = await pool.query(
+    const shadowRows = await waitForRows(
       'SELECT user_id, slot, event, totals, meta FROM meal_logs_v2_shadow',
+      [],
     );
-    expect(shadowRows.rows).toHaveLength(1);
-    const shadow = shadowRows.rows[0];
+    expect(shadowRows).toHaveLength(1);
+    const shadow = shadowRows[0];
     expect(String(shadow.user_id)).toBe(String(userId));
     expect(shadow.slot).toBe('other');
     expect(shadow.event).toBe('eat');
