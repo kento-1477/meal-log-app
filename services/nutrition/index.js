@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { createAiProvider } = require('./providers/aiProvider');
 const { createHybridProvider } = require('./providers/hybridProvider');
 const { createDictProvider } = require('./providers/dictProvider');
-const { createGuardrailRunner, GUARDRAIL_VERSION } = require('./guardrails');
+const { createGuardrailRunner } = require('./guardrails');
 const { createCache } = require('./cache');
 const { computeFromItems } = require('./computeFromItems');
 

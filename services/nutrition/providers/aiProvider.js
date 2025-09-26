@@ -120,7 +120,7 @@ function createAiProvider({
   const breaker = createCircuitBreaker();
   const fallbackProvider = dictFallback || createDictProvider();
 
-  async function analyze({ text, locale = 'ja', userId = null }) {
+  async function analyze({ text, locale = 'ja', _userId = null }) {
     const requestId = hashRequest(text, locale);
     const meta = {
       provider: 'ai',

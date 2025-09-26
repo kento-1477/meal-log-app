@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 exports.up = async function up(knex) {
   try {
     await knex.raw('CREATE EXTENSION IF NOT EXISTS pg_trgm');

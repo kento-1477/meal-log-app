@@ -5,13 +5,12 @@ const {
   roundTotals,
 } = require('../types');
 
-const LOW_CAL_PATTERN =
-  '(?:水|お茶|ブラックコーヒー|緑茶|ほうじ茶|麦茶|sparkling\s*water|water|black\s*coffee|ゼロカロリー|diet\s+cola|ソーダ水)';
+const BASE_LOW_CAL_REGEX =
+  /(?:水|お茶|ブラックコーヒー|緑茶|ほうじ茶|麦茶|sparkling\s*water|water|black\s*coffee|ゼロカロリー|diet\s+cola|ソーダ水)/iu;
 const LOW_CAL_EXTRA = (process.env.LOW_CAL_REGEX_EXTRA || '').trim();
-const LOW_CAL_REGEX = new RegExp(
-  LOW_CAL_EXTRA ? `${LOW_CAL_PATTERN}|${LOW_CAL_EXTRA}` : LOW_CAL_PATTERN,
-  'iu',
-);
+const LOW_CAL_REGEX = LOW_CAL_EXTRA
+  ? new RegExp(`${BASE_LOW_CAL_REGEX.source}|${LOW_CAL_EXTRA}`, 'iu')
+  : BASE_LOW_CAL_REGEX;
 
 function allowLowCalorie(context = {}) {
   const text = [context.inputText, context.dish]

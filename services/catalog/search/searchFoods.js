@@ -29,7 +29,7 @@ function mapRow(row) {
 async function searchFoods(
   pool,
   rawQuery,
-  { limit = DEFAULT_LIMIT, minSim = DEFAULT_MIN_SIM, locale = 'ja' } = {},
+  { limit = DEFAULT_LIMIT, minSim = DEFAULT_MIN_SIM, _locale = 'ja' } = {},
 ) {
   const normalized = normalizeQuery(rawQuery || '');
   if (!normalized) return [];

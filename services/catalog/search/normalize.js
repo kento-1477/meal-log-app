@@ -33,7 +33,7 @@ function normalizeQuery(text = '') {
   const cleaned = kana
     .replace(/[\s\u3000]+/g, ' ')
     .replace(/[\uFF0C,、，；;]+/g, ' ')
-    .replace(/[\u2010-\u2015\u2212\u30fc\-]+/g, '-')
+    .replace(/[\u2010-\u2015\u2212\u30fc-]+/g, '-')
     .trim();
   const withoutBrands = removeStopwords(cleaned);
   return withoutBrands.replace(/\s+/g, ' ').trim();
