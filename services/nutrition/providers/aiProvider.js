@@ -1,3 +1,16 @@
+const DISABLED_MARKERS = new Set(['0', 'false', 'no', 'off', 'disabled', '']);
+const ENABLED_MARKERS = new Set(['1', 'true', 'yes', 'on', 'enabled']);
+const RETRY_ON_429 = String(process.env.RETRY_ON_429 || '').trim() === '1';
+
+function isAiEnabled() {
+  const raw = process.env.ENABLE_AI;
+  if (raw === undefined || raw === null) return true;
+  const normalized = String(raw).trim().toLowerCase();
+  if (ENABLED_MARKERS.has(normalized)) return true;
+  if (DISABLED_MARKERS.has(normalized)) return false;
+  return true;
+}
+
 const crypto = require('crypto');
 const { setTimeout: delay } = require('timers/promises');
 const geminiProvider = require('./geminiProvider');
@@ -115,11 +128,12 @@ function isPermanentError(error) {
     error?.response?.status ||
     error?.response?.statusCode ||
     null;
-  if (status === 404 || status === 429) return true;
+  if (status === 404) return true;
+  if (status === 429) return !RETRY_ON_429;
   const message = String(error?.message || '').toLowerCase();
   if (message.includes('404') || message.includes('not found')) return true;
   if (message.includes('429') || message.includes('too many requests'))
-    return true;
+    return !RETRY_ON_429;
   return false;
 }
 
@@ -147,17 +161,56 @@ function createAiProvider({
       requestId,
     };
 
-    if (breaker.isOpen()) {
-      const warnings = ['ai_circuit_open'];
-      logger.warn?.('aiProvider.circuitOpen', { requestId });
+    const fallbackToDict = async (reason) => {
+      try {
+        if (fallbackProvider?.analyzeLegacy) {
+          const legacy = await fallbackProvider.analyzeLegacy({ text, locale });
+          const payload = adaptGeminiResult({
+            dish: legacy.dish,
+            confidence: legacy.confidence,
+            calories: legacy.nutrition?.calories,
+            protein_g: legacy.nutrition?.protein_g,
+            fat_g: legacy.nutrition?.fat_g,
+            carbs_g: legacy.nutrition?.carbs_g,
+            items: legacy.breakdown?.items,
+            warnings: legacy.breakdown?.warnings || [],
+            meta: { ...legacy.meta, fallback_used: true },
+          });
+          const warningSet = new Set(payload.warnings || []);
+          warningSet.add('ai_fallback_dict');
+          if (reason) warningSet.add(reason);
+          logger.info?.('aiProvider.fallback_dict', { requestId, reason });
+          return {
+            ...payload,
+            warnings: Array.from(warningSet),
+            meta: { ...meta, ...payload.meta, fallback: reason },
+          };
+        }
+      } catch (fallbackError) {
+        logger.error?.('aiProvider.dictFallbackError', {
+          requestId,
+          error: fallbackError?.message,
+        });
+      }
       return {
         dish: text || null,
         totals: { kcal: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
         items: [],
-        warnings,
+        warnings: ['ai_failed', reason].filter(Boolean),
         confidence: null,
-        meta: { ...meta, circuitOpen: true },
+        meta: { ...meta, fallback: reason, fallback_error: true },
       };
+    };
+
+    const aiEnabled = isAiEnabled();
+    if (!aiEnabled) {
+      logger.warn?.('aiProvider.disabled', { requestId });
+      return fallbackToDict('ai_disabled');
+    }
+
+    if (breaker.isOpen()) {
+      logger.warn?.('aiProvider.circuitOpen', { requestId });
+      return fallbackToDict('ai_circuit_open');
     }
 
     const maxRetries = Math.max(0, DEFAULT_MAX_RETRIES);
@@ -215,58 +268,11 @@ function createAiProvider({
           await delay(backoff);
           continue;
         }
-        try {
-          if (fallbackProvider?.analyzeLegacy) {
-            const legacy = await fallbackProvider.analyzeLegacy({
-              text,
-              locale,
-            });
-            const payload = adaptGeminiResult({
-              dish: legacy.dish,
-              confidence: legacy.confidence,
-              calories: legacy.nutrition?.calories,
-              protein_g: legacy.nutrition?.protein_g,
-              fat_g: legacy.nutrition?.fat_g,
-              carbs_g: legacy.nutrition?.carbs_g,
-              items: legacy.breakdown?.items,
-              warnings: (legacy.breakdown?.warnings || []).concat(
-                'ai_fallback_dict',
-              ),
-              meta: { ...legacy.meta, fallback_used: true },
-            });
-            logger.info?.('aiProvider.fallback_dict', { requestId });
-            return {
-              ...payload,
-              meta: { ...meta, ...payload.meta, fallback: 'dict' },
-            };
-          }
-        } catch (fallbackError) {
-          logger.error?.('aiProvider.dictFallbackError', {
-            requestId,
-            error: fallbackError?.message,
-          });
-          breaker.trip();
-        }
-        const warnings = ['ai_failed'];
-        logger.warn?.('aiProvider.zeroFloorFallback', { requestId });
-        return {
-          dish: text || null,
-          totals: { kcal: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
-          items: [],
-          warnings,
-          confidence: null,
-          meta: { ...meta, error: error?.message, fallback: 'zerofloor' },
-        };
+        const reason = permanent ? 'dict_permanent_error' : 'dict_error';
+        return fallbackToDict(reason);
       }
     }
-    return {
-      dish: text || null,
-      totals: { kcal: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },
-      items: [],
-      warnings: ['ai_failed'],
-      confidence: null,
-      meta: { provider: 'ai', circuitOpen: breaker.isOpen() },
-    };
+    return fallbackToDict('dict_unavailable');
   }
 
   return { analyze, meta: { model, modelVersion, promptVersion } };
