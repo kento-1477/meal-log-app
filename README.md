@@ -6,27 +6,27 @@ Next‑gen food tracking app that lets users log meals by simply chatting or sen
 
 ## 📚 Documentation Hub
 
-- [仕様 (SPEC.md)](docs/SPEC.md) — AI正規化・10ガード・Phase切替の全体像
-- [テスト計画 (TESTPLAN.md)](docs/TESTPLAN.md) — RACI / CI マトリクス / フィクスチャ一覧
-- [運用手順 (RUNBOOK.md)](docs/RUNBOOK.md) — Phase0〜3・ロールバック・アラート対応
+- [仕様 (SPEC.md)](docs/SPEC.md) — Provider切替・ガードレール・OFFカタログの全体像
+- [変更履歴 (CHANGELOG.md)](docs/CHANGELOG.md) — フェーズ毎のリリースメモ
+- [アーカイブ: TESTPLAN](docs/archive/TESTPLAN.md) — 旧RACI / CI マトリクス / フィクスチャ一覧
+- [アーカイブ: RUNBOOK](docs/archive/RUNBOOK.md) — Phase0〜3・ロールバック手順 (旧版)
 - [API スキーマ](docs/api/SCHEMA.md) — `item_id` 22文字 base64url などのJSON Schema
 - [ADR](docs/adr) — Atwater方針 / Never‑Zero / Dual Migration の意思決定記録
-- [オペレーションメモ](docs/ops/archive.md) — Shadowテーブルのアーカイブ実行手順
 - [Observability](observability/README.md) — Grafana/Prometheus assets & pulling scripts
 
 ---
 
 ## ✨ Key Features
 
-| Category              | Details                                                                                                                 |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **Chat Logging**      | `/log` endpoint accepts text or image uploads → AI正規化 → 10ガード → nutrition計算（dual write）                       |
-| **Image → Nutrition** | `services/nutrition/providers/geminiProvider.js` uses Gemini API to propose items; deterministic fallbacks keep UX safe |
-| **AI Advice**         | Gemini generates personalised tips shown on dashboard                                                                   |
-| **Reminders / Cron**  | Scheduled coaching messages (gentle/intense) avoiding duplicates                                                        |
-| **Auth**              | Passport‑local sessions stored in PG `connect-pg-simple`                                                                |
-| **CI / CD**           | GitHub Actions runs lint＋tests＋diff gate; branch protection blocks un‑green PRs                                       |
-| **Infra**             | Node 22 · Express · Multer · PostgreSQL · (Render.com deploy)                                                           |
+| Category             | Details                                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Chat Logging**     | `/log` → `NutritionProvider` (env切替) → guardrails (`schema→sanitize→reconcile→zeroFloor`) → PostgreSQL shadow write |
+| **Image / Text**     | `aiProvider` (Gemini) with circuit breaker＋cache; OFFカタログ優先でヒット時はDB栄養値を即採用                        |
+| **AI Advice**        | Gemini generates personalised tips shown on dashboard                                                                 |
+| **Reminders / Cron** | Scheduled coaching messages (gentle/intense) avoiding duplicates                                                      |
+| **Auth**             | Passport‑local sessions stored in PG `connect-pg-simple`                                                              |
+| **CI / CD**          | GitHub Actions runs lint＋tests＋diff gate; branch protection blocks un‑green PRs                                     |
+| **Infra**            | Node 22 · Express · Multer · PostgreSQL · (Render.com deploy)                                                         |
 
 ---
 
@@ -208,27 +208,28 @@ npm test -- --runInBand
 # Diff fixtures (optional / CI parity)
 npm run test:golem
 
-ENV keys
+> Unit / DB tests pin `NUTRITION_PROVIDER=dict` to exercise the legacy pipeline; production defaults remain `ai`.
 
-TEST_DATABASE_URL=postgres://test_user:test_password@127.0.0.1:5433/test_meal_log_db
+## Key Environment Variables
 
-# Nutrition Provider
-NUTRITION_PROVIDER=gemini
-GEMINI_MODEL=gemini-1.5-flash
-GEMINI_API_KEY=your_key_here
-GEMINI_MOCK=0
-
-Nutritionix（任意 / 未設定時はダミー解析）
-
-NUTRIX_ID=your_app_id
-
-NUTRIX_KEY=your_app_key
-```
-
-```
-
-```
-
-```
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `NUTRITION_PROVIDER` | Provider mode (`ai` / `hybrid` / `dict`) | `ai` |
+| `AI_MODEL` / `MODEL_VERSION` | LLM identifier & logical version (for cache busting) | `gemini-1.5-flash` / `2025-09-25-a` |
+| `PROMPT_VERSION` / `GUARDRAIL_VERSION` | Prompt & guardrail revisions (included in cache keys) | `v1` / `2025-09-25-a` |
+| `CACHE_ENABLED` / `CACHE_TTL_SEC` | Toggle & TTL for nutrition cache (single-flight) | `1` / `604800` |
+| `GUARD_KCAL_MIN` / `GUARD_KCAL_MAX` | Zero-floor bounds (kcal) | `120` / `2000` |
+| `LOW_CAL_REGEX_EXTRA` | Extra regex fragment for low-calorie exemption | (blank) |
+| `RECONCILE_TOLERANCE` | Atwater tolerance for macro rescale | `0.1` |
+| `AI_TIMEOUT_MS` / `AI_MAX_LATENCY_MS` | Hard timeout & latency guard for AI calls | `8000` / `15000` |
+| `NUTRITION_MAX_RETRIES` | AI retry attempts before fallback | `1` |
+| `AI_CIRCUIT_FAILURE_THRESHOLD` / `AI_CIRCUIT_OPEN_MS` | Circuit breaker sensitivity | `5` / `30000` |
+| `OFF_SNAPSHOT_URL` | OFF JSONL download source | (manual) |
+| `OFF_LANGS` / `OFF_COUNTRY_TAG` | OFF ingestion filters | `ja,en` / `jp` |
+| `CANDIDATE_LIMIT` / `FOOD_SEARCH_MAX_LIMIT` | Max candidates surfaced in UI/API | `3` / `5` |
+| `CATALOG_MIN_SIM` | Minimum trigram similarity for fuzzy OFF matches | `0.35` |
+| `FOOD_SEARCH_WINDOW_MS` | Burst guard window for `/api/foods/search` | `200` |
+| `FOOD_SEARCH_CLEANUP_MS` | Map cleanup interval for search burst guard | `300000` |
+| `CACHE_TTL_SEC` | Nutrition cache TTL in seconds | `604800` |
 
 ```

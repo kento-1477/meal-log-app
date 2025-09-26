@@ -1,5 +1,14 @@
 # CHANGELOG (Spec)
 
+## Unreleased — Provider Refactor
+
+- Added `nutrition` provider switch (`NUTRITION_PROVIDER`, default `dict`) with `services/nutrition/providers/dictProvider.js` wrapping the legacy pipeline.
+- `services/nutrition/index.js` now delegates through `getProvider()` so future AI/Hybrid providers can plug in without touching callers.
+- Repository cleanup: ignore `uploads/` & `server.log`, drop checked-in samples, move historical docs under `docs/archive/`.
+- Guardrails (`schema→sanitize→reconcile→zeroFloor`) exposed via `createGuardrailRunner`; zero-floor now respects low-calorie exemptions and records guardrail versions for cache invalidation.
+- AI provider adds circuit breaker + retries + dict fallback; cache keys hash locale, normalized text, `AI_MODEL`, `MODEL_VERSION`, `PROMPT_VERSION`, `GUARDRAIL_VERSION`.
+- Introduced OFF catalog ingestion (`services/catalog/ingest/offSnapshot.js`), search normalisation, and `/api/foods/search` internal endpoint with burst guard.
+
 ## Unreleased — Observability Labels
 
 - Shadow diff Prometheus metrics now carry default labels (`env`, `shadow_version`, `ai_provider`) via `register.setDefaultLabels()`. Update dashboards/alerts to aggregate with `env` (e.g., `sum by (le, env, field)`), and rely on the new `meal_log_app_build_info` Gauge for `app_version`×`model` metadata.

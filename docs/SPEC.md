@@ -1,4 +1,4 @@
-# SPEC — Meal‑Log App (v1.4 Hub)
+# SPEC — Meal‑Log App (v1.5 Provider Bridge)
 
 ## 1. Purpose / Scope
 
@@ -20,6 +20,11 @@ Client Chat → POST /log ──┬─ Legacy pipeline (store as-is)
                                  │ dual write / dual read
                                  └─ Diff monitor → Alerts / Rollback
 ```
+
+- Nutrition pipeline resolves through `NutritionProvider` (env `NUTRITION_PROVIDER`, default `dict`). Future `ai`/`hybrid` providers plug in with identical contracts to allow zero-downtime swaps.
+- Guardrails run `schema → sanitize → reconcile → zeroFloor`; guardrail revisions are versioned (`GUARDRAIL_VERSION`) and included in cache keys.
+- AI path enforces circuit breaker + retries; on sustained failure the system falls back to dictProvider or zero-floor with warnings.
+- Cache keys hash locale, normalized text, `AI_MODEL`, `MODEL_VERSION`, `PROMPT_VERSION`, and guardrail version to avoid stale reuse.
 
 ## 4. Data Model (excerpt)
 
@@ -44,10 +49,23 @@ Client Chat → POST /log ──┬─ Legacy pipeline (store as-is)
 
 ## 8. Links
 
-- TESTPLAN.md（RACI/CI/fixtures）
-- RUNBOOK.md（Phase/rollback/alerts）
+- archive/TESTPLAN.md（legacy RACI / CI / fixtures）
+- archive/RUNBOOK.md（legacy phase / rollback guides）
 - API/SCHEMA.md（JSON Schema）
 - GLOSSARY.md
+- archive/IMPLEMENTATION_PLAN.md（historical rollout）
+- archive/GEMINI.md（legacy architecture notes）
+
+## 12. OFF Catalog Integration
+
+- Weekly snapshot ingestion via `services/catalog/ingest/offSnapshot.js` writes to a staging table then swaps into `off_products`.
+- Serving size strings are normalised (`parseServingSize`) and stored alongside `serving_qty_g`.
+- Search pipeline normalises Japanese text (NFKC, kana conversion, brand stopword removal) before running exact/prefix/trigram queries.
+- Confidence thresholds: exact=0.95, prefix=0.75, fuzzy=0.55+sim×0.3 (calibrated via labelled dataset).
+- `/api/foods/search` is internal-only (session auth + burst guard) and feeds the chat UI with top N candidates.
+- Cache & provider keys include `MODEL_VERSION`, `PROMPT_VERSION`, and `GUARDRAIL_VERSION` so prompt/guard tweaks invalidate stale entries automatically.
+- Automated Jest suites run with `NUTRITION_PROVIDER=dict` to retain legacy expectations; production/staging default to `ai`.
+- `LOW_CAL_REGEX_EXTRA` env can extend the low-calorie exemption pattern without code changes.
 
 ---
 

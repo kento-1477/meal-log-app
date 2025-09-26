@@ -11,6 +11,7 @@ const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
 const { runReminderCheck } = require('./services/reminders-check');
 const { analyze, computeFromItems } = require('./services/nutrition');
+const { searchFoods } = require('./services/catalog');
 // const { LogItemSchema } = require('./schemas/logItem');
 const client = require('prom-client');
 const { register } = client;
@@ -34,6 +35,20 @@ const METRIC_MODEL =
   process.env.GEMINI_MODEL ||
   process.env.GENERATIVE_MODEL ||
   'gemini-1.5-flash';
+const FOOD_SEARCH_WINDOW_MS = Number(process.env.FOOD_SEARCH_WINDOW_MS || 200);
+const FOOD_SEARCH_MAX_LIMIT = Number(process.env.FOOD_SEARCH_MAX_LIMIT || 5);
+const FOOD_SEARCH_CLEANUP_MS = Number(
+  process.env.FOOD_SEARCH_CLEANUP_MS || 5 * 60 * 1000,
+);
+const FOOD_SEARCH_LAST = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, ts] of FOOD_SEARCH_LAST.entries()) {
+    if (now - ts > FOOD_SEARCH_CLEANUP_MS) {
+      FOOD_SEARCH_LAST.delete(key);
+    }
+  }
+}).unref?.();
 
 register.setDefaultLabels({
   env: METRIC_ENV,
@@ -1150,6 +1165,40 @@ app.get('/api/session', (req, res) => {
       email: req.user.email,
     },
   });
+});
+
+app.get('/api/foods/search', requireApiAuth, async (req, res) => {
+  const key = (req.user && req.user.id) || req.sessionID;
+  if (!key) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const last = FOOD_SEARCH_LAST.get(key) || 0;
+  const now = Date.now();
+  if (now - last < FOOD_SEARCH_WINDOW_MS) {
+    return res.status(429).json({ error: 'too_many_requests' });
+  }
+  FOOD_SEARCH_LAST.set(key, now);
+
+  const query = (req.query.q || '').toString();
+  const limit = Math.min(
+    FOOD_SEARCH_MAX_LIMIT,
+    Math.max(1, Number(req.query.limit || process.env.CANDIDATE_LIMIT || 3)),
+  );
+
+  if (!query.trim()) {
+    return res.json({ q: '', candidates: [] });
+  }
+
+  try {
+    const candidates = await searchFoods(pool, query, {
+      limit,
+      locale: (req.user && req.user.locale) || 'ja',
+    });
+    res.json({ q: query, candidates });
+  } catch (error) {
+    console.error('foods.search.error', error);
+    res.status(500).json({ error: 'catalog_search_failed' });
+  }
 });
 
 // Stubbed API endpoints for dashboard
