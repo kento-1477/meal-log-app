@@ -1,3 +1,12 @@
+function parseBool(value, defaultValue = true) {
+  if (value === undefined || value === null) return defaultValue;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off', 'disabled', ''].includes(normalized))
+    return false;
+  return defaultValue;
+}
+
 const crypto = require('crypto');
 
 const { createAiProvider } = require('./providers/aiProvider');
@@ -12,6 +21,7 @@ const MODEL_VERSION = process.env.MODEL_VERSION || '2025-09-25-a';
 const PROMPT_VERSION = process.env.PROMPT_VERSION || 'v1';
 const CACHE_ENABLED = process.env.CACHE_ENABLED !== '0';
 const CACHE_TTL_SEC = Number(process.env.CACHE_TTL_SEC || 60 * 60 * 24 * 7);
+const ENABLE_AI = parseBool(process.env.ENABLE_AI, true);
 
 const guardrailRunner = createGuardrailRunner();
 const cache = createCache({ ttlSeconds: CACHE_TTL_SEC });
@@ -38,8 +48,12 @@ function normalizeText(text = '') {
 }
 
 function selectProviderName() {
-  const mode = (process.env.NUTRITION_PROVIDER || 'ai').toLowerCase();
-  if (providerFactories[mode]) return mode;
+  const explicit = (process.env.NUTRITION_PROVIDER || '').trim().toLowerCase();
+  const aiOverride = (process.env.AI_PROVIDER || '').trim().toLowerCase();
+
+  if (!ENABLE_AI) return 'dict';
+  if (aiOverride && providerFactories[aiOverride]) return aiOverride;
+  if (explicit && providerFactories[explicit]) return explicit;
   return 'ai';
 }
 
