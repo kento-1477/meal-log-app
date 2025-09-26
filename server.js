@@ -16,6 +16,45 @@ const { searchFoods } = require('./services/catalog');
 const client = require('prom-client');
 const { register } = client;
 const { version: APP_VERSION } = require('./package.json');
+function normalizeAnalysisForResponse(result = {}) {
+  const base = result || {};
+  const totals = {
+    kcal: base?.totals?.kcal ?? base?.nutrition?.calories ?? 0,
+    protein_g: base?.totals?.protein_g ?? base?.nutrition?.protein_g ?? 0,
+    fat_g: base?.totals?.fat_g ?? base?.nutrition?.fat_g ?? 0,
+    carbs_g: base?.totals?.carbs_g ?? base?.nutrition?.carbs_g ?? 0,
+  };
+  const rawBreakdown =
+    base?.breakdown && typeof base.breakdown === 'object' ? base.breakdown : {};
+  const breakdown = {
+    ...rawBreakdown,
+    items: Array.isArray(rawBreakdown.items)
+      ? rawBreakdown.items
+      : Array.isArray(base.items)
+        ? base.items
+        : [],
+    warnings: Array.isArray(rawBreakdown.warnings)
+      ? rawBreakdown.warnings
+      : Array.isArray(base.warnings)
+        ? base.warnings
+        : [],
+  };
+  const items = Array.isArray(base.items) ? base.items : breakdown.items;
+  return {
+    ...base,
+    totals,
+    items,
+    breakdown,
+    nutrition: {
+      calories: totals.kcal,
+      protein_g: totals.protein_g,
+      fat_g: totals.fat_g,
+      carbs_g: totals.carbs_g,
+    },
+    meta: base.meta || {},
+  };
+}
+
 const { aiRawParseFail, chooseSlotMismatch } = require('./metrics/aiRaw');
 
 const METRIC_ENV =
@@ -1356,20 +1395,9 @@ app.post(
         mime: file?.mimetype,
       });
 
-      // PATCH_LOG_GUARD_START
-      // The analyze() function now handles all nutrition calculation and fallbacks.
-      // We can directly use its output.
-      const finalAnalysisResult = {
-        ...(analysisResult || {}),
-        breakdown: analysisResult?.breakdown || {}, // Ensure breakdown is always present
-        nutrition: analysisResult?.nutrition || {
-          protein_g: 0,
-          fat_g: 0,
-          carbs_g: 0,
-          calories: 0,
-        }, // Ensure nutrition is always present
-      };
-      // PATCH_LOG_GUARD_END
+      const finalAnalysisResult = normalizeAnalysisForResponse(
+        analysisResult || {},
+      );
 
       if (!message && req.file && process.env.GEMINI_MOCK === '1') {
         try {
@@ -1397,7 +1425,7 @@ app.post(
         );
         imageId = mediaRows[0].id;
       }
-      const landing_type = finalAnalysisResult.meta.source_kind;
+      const landing_type = finalAnalysisResult.meta?.source_kind || null;
 
       const { rows } = await client.query(
         `INSERT INTO meal_logs
@@ -1408,10 +1436,10 @@ app.post(
         [
           user_id,
           finalAnalysisResult.dish || message,
-          finalAnalysisResult.nutrition.calories,
-          finalAnalysisResult.nutrition.protein_g,
-          finalAnalysisResult.nutrition.fat_g,
-          finalAnalysisResult.nutrition.carbs_g,
+          finalAnalysisResult.totals.kcal,
+          finalAnalysisResult.totals.protein_g,
+          finalAnalysisResult.totals.fat_g,
+          finalAnalysisResult.totals.carbs_g,
           JSON.stringify(finalAnalysisResult),
           imageId,
           landing_type,
@@ -1455,7 +1483,9 @@ app.post(
         logId,
         dish: finalAnalysisResult.dish,
         confidence: finalAnalysisResult.confidence,
+        totals: finalAnalysisResult.totals,
         nutrition: finalAnalysisResult.nutrition,
+        items: finalAnalysisResult.items,
         breakdown: finalAnalysisResult.breakdown,
         meta: finalAnalysisResult.meta,
         landing_type: finalAnalysisResult.meta.source_kind, // for backward compatibility
@@ -1463,7 +1493,7 @@ app.post(
       idempotencyCounter.labels('new').inc();
       const volatileOn = process.env.ENABLE_VOLATILE_SLOTS === '1';
       if (volatileOn) {
-        slotState.set(logId, analysisResult); // Store the full analysisResult
+        slotState.set(logId, finalAnalysisResult); // Store the full analysisResult
       }
     } catch (err) {
       if (reservation && reservation.status === 'new' && reservation.client) {
@@ -1624,6 +1654,16 @@ app.post(
         breakdown: newBreakdown,
         landing_type: src.landing_type,
       };
+      updatedAnalysisResult.totals = {
+        kcal: agg.kcal,
+        protein_g: agg.P,
+        fat_g: agg.F,
+        carbs_g: agg.C,
+      };
+      updatedAnalysisResult.items = newBreakdown.items;
+      const normalizedAnalysisResult = normalizeAnalysisForResponse(
+        updatedAnalysisResult,
+      );
 
       const sql = `
      UPDATE meal_logs SET
@@ -1640,7 +1680,7 @@ app.post(
         agg.F,
         agg.C,
         agg.kcal,
-        JSON.stringify(updatedAnalysisResult),
+        JSON.stringify(normalizedAnalysisResult),
         logId,
         req.user.id,
         updatedAnalysisResult.landing_type ?? null,
@@ -1673,9 +1713,13 @@ app.post(
       // AI結果の不一致メトリクス（統計用）
       if (
         savedAiRaw &&
-        JSON.stringify(savedAiRaw) !== JSON.stringify(updatedAnalysisResult)
+        JSON.stringify(savedAiRaw) !== JSON.stringify(normalizedAnalysisResult)
       ) {
         chooseSlotMismatch.inc();
+      }
+
+      if (volatileOn) {
+        slotState.set(logId, normalizedAnalysisResult);
       }
 
       return res.status(200).json({
@@ -1684,8 +1728,10 @@ app.post(
         logId,
         dish,
         confidence,
-        nutrition: updatedAnalysisResult.nutrition,
-        breakdown: newBreakdown,
+        totals: normalizedAnalysisResult.totals,
+        nutrition: normalizedAnalysisResult.nutrition,
+        items: normalizedAnalysisResult.items,
+        breakdown: normalizedAnalysisResult.breakdown,
         updatedAt: newUpdatedAt,
         row_version: newRowVersion,
       });

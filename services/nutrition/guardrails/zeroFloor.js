@@ -75,6 +75,16 @@ function zeroFloor(payload, options = {}) {
   redistributed.kcal = flooredKcal;
   warnings.add('zeroFloored');
 
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      console.info('[guardrail] zeroFloored', {
+        dish: payload.dish || options.inputText || null,
+      });
+    } catch (_e) {
+      // ignore logging errors
+    }
+  }
+
   return {
     ...payload,
     totals: roundTotals(redistributed),

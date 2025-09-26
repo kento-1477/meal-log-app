@@ -26,7 +26,11 @@ function createGuardrailRunner({ version } = {}) {
       fat_g: floored.totals.fat_g,
       carbs_g: floored.totals.carbs_g,
     };
-    const legacyBreakdown = { items: floored.items, warnings };
+    const legacyBreakdown = {
+      ...(floored.breakdown || {}),
+      items: floored.items,
+      warnings,
+    };
 
     return {
       ...floored,
