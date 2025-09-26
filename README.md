@@ -215,6 +215,7 @@ npm run test:golem
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `NUTRITION_PROVIDER` | Provider mode (`ai` / `hybrid` / `dict`) | `ai` |
+| `ENABLE_AI` | Explicit AI toggle (`false`/`0` disables) | `true` |
 | `AI_MODEL` / `MODEL_VERSION` | LLM identifier & logical version (for cache busting) | `gemini-1.5-flash` / `2025-09-25-a` |
 | `PROMPT_VERSION` / `GUARDRAIL_VERSION` | Prompt & guardrail revisions (included in cache keys) | `v1` / `2025-09-25-a` |
 | `CACHE_ENABLED` / `CACHE_TTL_SEC` | Toggle & TTL for nutrition cache (single-flight) | `1` / `604800` |
@@ -222,6 +223,7 @@ npm run test:golem
 | `LOW_CAL_REGEX_EXTRA` | Extra regex fragment for low-calorie exemption | (blank) |
 | `RECONCILE_TOLERANCE` | Atwater tolerance for macro rescale | `0.1` |
 | `AI_TIMEOUT_MS` / `AI_MAX_LATENCY_MS` | Hard timeout & latency guard for AI calls | `8000` / `15000` |
+| `RETRY_ON_429` | Retry once on 429 responses before falling back | `0` |
 | `NUTRITION_MAX_RETRIES` | AI retry attempts before fallback | `1` |
 | `AI_CIRCUIT_FAILURE_THRESHOLD` / `AI_CIRCUIT_OPEN_MS` | Circuit breaker sensitivity | `5` / `30000` |
 | `OFF_SNAPSHOT_URL` | OFF JSONL download source | (manual) |

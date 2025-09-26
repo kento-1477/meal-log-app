@@ -66,6 +66,7 @@ Client Chat → POST /log ──┬─ Legacy pipeline (store as-is)
 - Cache & provider keys include `MODEL_VERSION`, `PROMPT_VERSION`, and `GUARDRAIL_VERSION` so prompt/guard tweaks invalidate stale entries automatically.
 - Automated Jest suites run with `NUTRITION_PROVIDER=dict` to retain legacy expectations; production/staging default to `ai`.
 - `LOW_CAL_REGEX_EXTRA` env can extend the low-calorie exemption pattern without code changes.
+- `ENABLE_AI` (true/false) と `AI_PROVIDER` でプロバイダ選択を制御。`RETRY_ON_429=1` で 429 時に 1 リトライ実施。
 
 ---
 
