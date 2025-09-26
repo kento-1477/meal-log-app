@@ -97,7 +97,7 @@ jobs:
         run: npm test --if-present
         env:
           GEMINI_MOCK: '1'
-          NUTRITION_PROVIDER: 'gemini'
+          NUTRITION_PROVIDER: 'dict'
 
       - name: Run Golem fixtures
         run: npm run test:golem
