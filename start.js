@@ -19,6 +19,26 @@ Client.prototype.query = function (text, params, ...rest) {
 };
 // --- /PG GLOBAL DEBUG ---
 
+// --- AI Boot Config Dump ---
+function tail(s) {
+  return typeof s === 'string' && s.length ? s.slice(-6) : 'none';
+}
+
+function toBool(v) {
+  return /^(1|true|yes|on)$/i.test(String(v || '').trim());
+}
+
+console.log('[ai] boot config', {
+  AI_PROVIDER: process.env.AI_PROVIDER,
+  NUTRITION_PROVIDER: process.env.NUTRITION_PROVIDER,
+  GEMINI_MODEL: process.env.GEMINI_MODEL,
+  GEMINI_KEY_tail: tail(process.env.GEMINI_API_KEY),
+  ENABLE_AI_raw: process.env.ENABLE_AI,
+  ENABLE_AI: toBool(process.env.ENABLE_AI),
+  NODE_CMD: process.env.npm_lifecycle_event || 'unknown',
+});
+// --- /AI Boot Config Dump ---
+
 const app = require('./server');
 const { initializeDatabase } = require('./services/db-init');
 

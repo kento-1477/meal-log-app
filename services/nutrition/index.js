@@ -42,6 +42,7 @@ const providerFactories = {
 };
 
 const providerCache = {};
+let providerLogged = false;
 
 function normalizeText(text = '') {
   return String(text).replace(/\s+/g, ' ').trim().toLowerCase();
@@ -51,10 +52,25 @@ function selectProviderName() {
   const explicit = (process.env.NUTRITION_PROVIDER || '').trim().toLowerCase();
   const aiOverride = (process.env.AI_PROVIDER || '').trim().toLowerCase();
 
-  if (!ENABLE_AI) return 'dict';
-  if (aiOverride && providerFactories[aiOverride]) return aiOverride;
-  if (explicit && providerFactories[explicit]) return explicit;
-  return 'ai';
+  let resolved = 'ai';
+  if (!ENABLE_AI) {
+    resolved = 'dict';
+  } else if (aiOverride && providerFactories[aiOverride]) {
+    resolved = aiOverride;
+  } else if (explicit && providerFactories[explicit]) {
+    resolved = explicit;
+  }
+
+  if (!providerLogged) {
+    console.log('[ai] provider select', {
+      NUTRITION_PROVIDER: process.env.NUTRITION_PROVIDER,
+      AI_PROVIDER: process.env.AI_PROVIDER,
+      resolved,
+    });
+    providerLogged = true;
+  }
+
+  return resolved;
 }
 
 function getProvider(name = null) {
@@ -115,6 +131,16 @@ async function runAnalysis({ text, locale = 'ja', userId = null }) {
 
 async function analyze({ text, locale = 'ja', userId = null }) {
   const providerName = selectProviderName();
+  try {
+    console.log('[ai] analyze called', {
+      provider: providerName,
+      model: AI_MODEL,
+      enableAi: ENABLE_AI,
+      textPreview: (text || '').slice(0, 24),
+    });
+  } catch (_e) {
+    /* noop */
+  }
   const cacheKey = buildCacheKey({ text, locale, providerName });
   if (CACHE_ENABLED) {
     return cache.wrap(cacheKey, () => runAnalysis({ text, locale, userId }), {
