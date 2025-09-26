@@ -2,6 +2,7 @@ require('dotenv').config();
 const { randomUUID: _randomUUID, createHash } = require('crypto');
 const path = require('node:path');
 const express = require('express');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const bcrypt = require('bcryptjs');
 const passport = require('passport');
 const session = require('express-session');
@@ -959,6 +960,42 @@ app.get('/healthz', (_req, res) => {
   res.status(200).send('ok');
 });
 console.log('Health check endpoint ready at /healthz');
+
+app.get('/debug/ai', async (_req, res) => {
+  const tail = (s) =>
+    typeof s === 'string' && s.length ? s.slice(-6) : 'none';
+  const key = process.env.GEMINI_API_KEY;
+  const modelId = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+
+  if (!key) {
+    return res
+      .status(500)
+      .json({ ok: false, message: 'GEMINI_API_KEY missing' });
+  }
+
+  try {
+    const model = new GoogleGenerativeAI(key).getGenerativeModel({
+      model: modelId,
+    });
+    const response = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+    });
+    const text = response?.response?.text?.();
+    res.json({
+      ok: true,
+      model: modelId,
+      key_tail: tail(key),
+      textLen: typeof text === 'string' ? text.length : 0,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      model: modelId,
+      key_tail: tail(key),
+      message: String(error?.message || error),
+    });
+  }
+});
 
 // --- Core Middleware ---
 const morgan = require('morgan');
