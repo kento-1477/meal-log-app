@@ -84,17 +84,31 @@ async function realAnalyze(input) {
   throw new Error('AI not configured');
 }
 
-async function analyze(input) {
+async function analyzeInternal(input, { useGemini }) {
   let aiResult;
-  try {
-    aiResult = await realAnalyze(input);
-    aiResult.meta = makeMeta({ source_kind: 'ai', fallback_level: 0 });
-  } catch (_error) {
-    // If AI provider itself fails, set a default empty structure
+  if (useGemini) {
+    try {
+      aiResult = await realAnalyze(input);
+      aiResult.meta = makeMeta({ source_kind: 'ai', fallback_level: 0 });
+    } catch (_error) {
+      aiResult = {
+        dish: input.text || '食事',
+        items: [],
+        meta: makeMeta({ source_kind: 'ai', fallback_level: 0, error: true }),
+      };
+    }
+  } else {
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        console.debug('[dictProvider] skip gemini', { text: input?.text });
+      } catch (_e) {
+        /* noop */
+      }
+    }
     aiResult = {
       dish: input.text || '食事',
       items: [],
-      meta: makeMeta({ source_kind: 'ai', fallback_level: 0, error: true }),
+      meta: makeMeta({ source_kind: 'ai', fallback_level: 0, skipped: true }),
     };
   }
 
@@ -306,14 +320,11 @@ async function analyze(input) {
   return result;
 }
 
-async function analyzeLegacy(input) {
-  return analyze(input);
-}
-
-function createDictProvider() {
+function createDictProvider(options = {}) {
+  const providerOptions = { useGemini: options?.useGemini !== false };
   return {
-    analyze,
-    analyzeLegacy,
+    analyze: (input) => analyzeInternal(input, providerOptions),
+    analyzeLegacy: (input) => analyzeInternal(input, providerOptions),
   };
 }
 

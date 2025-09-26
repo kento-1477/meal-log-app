@@ -108,6 +108,21 @@ async function callGemini({ text, locale, prompt }) {
   return adaptGeminiResult(response);
 }
 
+function isPermanentError(error) {
+  const status =
+    error?.status ||
+    error?.statusCode ||
+    error?.response?.status ||
+    error?.response?.statusCode ||
+    null;
+  if (status === 404 || status === 429) return true;
+  const message = String(error?.message || '').toLowerCase();
+  if (message.includes('404') || message.includes('not found')) return true;
+  if (message.includes('429') || message.includes('too many requests'))
+    return true;
+  return false;
+}
+
 function createAiProvider({
   llm = null,
   dictFallback = null,
@@ -118,7 +133,8 @@ function createAiProvider({
   logger = console,
 } = {}) {
   const breaker = createCircuitBreaker();
-  const fallbackProvider = dictFallback || createDictProvider();
+  const fallbackProvider =
+    dictFallback || createDictProvider({ useGemini: false });
 
   async function analyze({ text, locale = 'ja', _userId = null }) {
     const requestId = hashRequest(text, locale);
@@ -179,12 +195,22 @@ function createAiProvider({
         };
       } catch (error) {
         breaker.recordFailure();
-        logger.error?.('aiProvider.error', {
-          requestId,
-          attempt,
-          error: error?.message,
-        });
-        if (attempt < maxRetries) {
+        const permanent = isPermanentError(error);
+        if (permanent) {
+          breaker.trip();
+          logger.warn?.('aiProvider.permanentError', {
+            requestId,
+            attempt,
+            error: error?.message,
+          });
+        } else {
+          logger.error?.('aiProvider.error', {
+            requestId,
+            attempt,
+            error: error?.message,
+          });
+        }
+        if (!permanent && attempt < maxRetries) {
           const backoff = 200 * 2 ** attempt;
           await delay(backoff);
           continue;
@@ -208,6 +234,7 @@ function createAiProvider({
               ),
               meta: { ...legacy.meta, fallback_used: true },
             });
+            logger.info?.('aiProvider.fallback_dict', { requestId });
             return {
               ...payload,
               meta: { ...meta, ...payload.meta, fallback: 'dict' },
@@ -221,6 +248,7 @@ function createAiProvider({
           breaker.trip();
         }
         const warnings = ['ai_failed'];
+        logger.warn?.('aiProvider.zeroFloorFallback', { requestId });
         return {
           dish: text || null,
           totals: { kcal: 0, protein_g: 0, fat_g: 0, carbs_g: 0 },

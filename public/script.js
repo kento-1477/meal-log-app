@@ -1,4 +1,71 @@
 /* exported addMessage */
+const ZERO_TOTALS = { kcal: 0, protein_g: 0, fat_g: 0, carbs_g: 0 };
+
+function extractTotals(analysis = {}) {
+  if (analysis && analysis.totals) {
+    const t = analysis.totals;
+    return {
+      kcal: Number(t.kcal ?? t.calories ?? 0),
+      protein_g: Number(t.protein_g ?? 0),
+      fat_g: Number(t.fat_g ?? 0),
+      carbs_g: Number(t.carbs_g ?? 0),
+    };
+  }
+  if (analysis && analysis.nutrition) {
+    const n = analysis.nutrition;
+    return {
+      kcal: Number(n.calories ?? 0),
+      protein_g: Number(n.protein_g ?? 0),
+      fat_g: Number(n.fat_g ?? 0),
+      carbs_g: Number(n.carbs_g ?? 0),
+    };
+  }
+  return { ...ZERO_TOTALS };
+}
+
+function extractBreakdown(analysis = {}) {
+  const raw =
+    analysis && analysis.breakdown && typeof analysis.breakdown === 'object'
+      ? analysis.breakdown
+      : {};
+  const items = Array.isArray(raw.items)
+    ? raw.items
+    : Array.isArray(analysis.items)
+      ? analysis.items
+      : [];
+  const warnings = Array.isArray(raw.warnings)
+    ? raw.warnings
+    : Array.isArray(analysis.warnings)
+      ? analysis.warnings
+      : [];
+  return { ...raw, items, warnings };
+}
+
+function normalizeAnalysisForUI(analysis = {}) {
+  const totals = extractTotals(analysis);
+  const breakdown = extractBreakdown(analysis);
+  const dish = analysis?.dish || '食事';
+  const confidence =
+    analysis?.confidence ??
+    analysis?.meta?.confidence ??
+    analysis?.base_confidence ??
+    null;
+  return {
+    ...analysis,
+    dish,
+    confidence,
+    totals,
+    breakdown,
+    nutrition: {
+      calories: totals.kcal,
+      protein_g: totals.protein_g,
+      fat_g: totals.fat_g,
+      carbs_g: totals.carbs_g,
+    },
+  };
+}
+
+/* exported addMessage */
 document.addEventListener('DOMContentLoaded', () => {
   const textInput = document.getElementById('text-input');
   const sendButton = document.getElementById('send-button');
@@ -144,25 +211,30 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (
-        data?.breakdown &&
-        data?.nutrition &&
-        (window.NUTRI_BREAKDOWN_UI ?? true)
-      ) {
+      const normalized = normalizeAnalysisForUI(data ?? {});
+      if (window.NUTRI_BREAKDOWN_UI ?? true) {
         const card = renderNutritionCard({
-          nutrition: data.nutrition,
-          breakdown: data.breakdown,
-          logId: data.logId,
+          analysis: normalized,
+          totals: normalized.totals,
+          breakdown: normalized.breakdown,
+          logId: normalized.logId ?? data?.logId ?? null,
         });
         addMessage(card, 'bot', null, false);
-      } else if (data?.nutrition && Number.isFinite(data.nutrition.calories)) {
-        const n = data.nutrition;
+      } else {
+        const totals = normalized.totals;
+        const macro = (value) => {
+          const num = Number(value);
+          if (!Number.isFinite(num)) return 0;
+          return Number.isInteger(num) ? num : Number(num.toFixed(1));
+        };
+        const kcalText = (() => {
+          const num = Number(totals.kcal);
+          return Number.isFinite(num) ? Math.round(num) : 0;
+        })();
         addMessage(
-          `🍱 推定: P ${n.protein_g}g / F ${n.fat_g}g / C ${n.carbs_g}g / ${n.calories}kcal`,
+          `🍱 推定: P ${macro(totals.protein_g)}g / F ${macro(totals.fat_g)}g / C ${macro(totals.carbs_g)}g / ${kcalText}kcal`,
           'bot',
         );
-      } else {
-        addMessage('✅ 記録しました', 'bot');
       }
     } catch (error) {
       console.error('Error:', error);
@@ -214,26 +286,53 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ---- NUTRI_BREAKDOWN_START renderNutritionCard ----
-function renderNutritionCard({ nutrition, breakdown, logId }) {
+function renderNutritionCard({ analysis, totals, breakdown, logId }) {
   const card = document.createElement('div');
   card.className = 'message bot-message nutri-card'; // bot-messageクラスを追加
   card.dataset.logId = logId;
 
+  const safeTotals = totals ?? ZERO_TOTALS;
+  const safeBreakdown =
+    breakdown && typeof breakdown === 'object' ? breakdown : {};
+  const items = Array.isArray(safeBreakdown.items) ? safeBreakdown.items : [];
+  const isUncertain = items.length === 0 || items.some((it) => it.pending);
+  const dish = analysis?.dish || '食事';
+  const confidenceRaw =
+    analysis?.confidence ??
+    analysis?.meta?.confidence ??
+    analysis?.base_confidence ??
+    null;
+  const confidencePct =
+    confidenceRaw !== null && Number.isFinite(Number(confidenceRaw))
+      ? Math.round(Number(confidenceRaw) * 100)
+      : null;
+
   const h = document.createElement('div');
   h.className = 'nutri-header';
-
-  const items = breakdown?.items ?? [];
-  const isUncertain = items.length === 0 || items.some((it) => it.pending);
-
   h.textContent = isUncertain
-    ? `🍱 ${nutrition?.dish || '食事'} ｜ ⚠️ 要確認`
-    : `🍱 ${nutrition?.dish || '食事'} ｜ 信頼度 ${Math.round(
-        (nutrition?.confidence ?? 0) * 100,
-      )}%`;
+    ? `🍱 ${dish} ｜ ⚠️ 要確認`
+    : confidencePct !== null
+      ? `🍱 ${dish} ｜ 信頼度 ${confidencePct}%`
+      : `🍱 ${dish}`;
+
+  const macroText = (value, decimals = 1) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '0';
+    if (decimals === 0) return Math.round(num).toString();
+    const rounded = Number(num.toFixed(decimals));
+    return Number.isInteger(rounded)
+      ? rounded.toString()
+      : rounded.toFixed(decimals);
+  };
 
   const core = document.createElement('div');
   core.className = 'nutri-core';
-  core.textContent = `P ${nutrition.protein_g}g / F ${nutrition.fat_g}g / C ${nutrition.carbs_g}g / ${nutrition.calories}kcal`;
+  core.textContent = `P ${macroText(safeTotals.protein_g)}g / F ${macroText(
+    safeTotals.fat_g,
+  )}g / C ${macroText(safeTotals.carbs_g)}g / ${macroText(
+    safeTotals.kcal,
+    0,
+  )}kcal`;
 
   card.appendChild(h);
   card.appendChild(core);
@@ -243,7 +342,9 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
     ul.className = 'nutri-items';
     items.slice(0, 5).forEach((it) => {
       const li = document.createElement('li');
-      let text = `${it.name || it.code} ${it.qty_g ?? ''}g`;
+      const label = it.name || it.code || '項目';
+      const grams = it.qty_g ?? it.grams ?? it.quantity_g ?? null;
+      let text = grams != null ? `${label} ${grams}g` : `${label}`;
       if (it.pending) {
         li.classList.add('pending-item');
         text += ' (未確定)';
@@ -299,13 +400,17 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
             const refetchResp = await fetch(`/api/log/${logId}`);
             const refetchData = await refetchResp.json();
             if (refetchData?.ok && refetchData.item?.ai_raw) {
+              const aiRaw = refetchData.item.ai_raw || {};
+              const normalizedRefetch = normalizeAnalysisForUI({
+                ...aiRaw,
+                logId: refetchData.item?.id ?? null,
+                dish: aiRaw.dish || refetchData.item?.food_item,
+              });
               const newCard = renderNutritionCard({
-                nutrition: {
-                  ...refetchData.item,
-                  ...refetchData.item.ai_raw.nutrition,
-                },
-                breakdown: refetchData.item.ai_raw.breakdown,
-                logId: refetchData.item.id,
+                analysis: normalizedRefetch,
+                totals: normalizedRefetch.totals,
+                breakdown: normalizedRefetch.breakdown,
+                logId: normalizedRefetch.logId ?? logId,
               });
               currentCard.replaceWith(newCard);
             } else {
@@ -316,10 +421,12 @@ function renderNutritionCard({ nutrition, breakdown, logId }) {
 
           const data = await resp.json();
           if (data?.ok) {
+            const normalizedResp = normalizeAnalysisForUI(data);
             const newCard = renderNutritionCard({
-              nutrition: data.nutrition,
-              breakdown: data.breakdown,
-              logId: data.logId,
+              analysis: normalizedResp,
+              totals: normalizedResp.totals,
+              breakdown: normalizedResp.breakdown,
+              logId: normalizedResp.logId ?? logId,
             });
             currentCard.replaceWith(newCard);
           } else {
