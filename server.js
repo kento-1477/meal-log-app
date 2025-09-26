@@ -11,50 +11,14 @@ const mealRoutes = require('./services/meals');
 const reminderRoutes = require('./services/reminders');
 const { runReminderCheck } = require('./services/reminders-check');
 const { analyze, computeFromItems } = require('./services/nutrition');
+const {
+  normalizeAnalysisForResponse,
+} = require('./services/nutrition/normalizeResponse');
 const { searchFoods } = require('./services/catalog');
 // const { LogItemSchema } = require('./schemas/logItem');
 const client = require('prom-client');
 const { register } = client;
 const { version: APP_VERSION } = require('./package.json');
-function normalizeAnalysisForResponse(result = {}) {
-  const base = result || {};
-  const totals = {
-    kcal: base?.totals?.kcal ?? base?.nutrition?.calories ?? 0,
-    protein_g: base?.totals?.protein_g ?? base?.nutrition?.protein_g ?? 0,
-    fat_g: base?.totals?.fat_g ?? base?.nutrition?.fat_g ?? 0,
-    carbs_g: base?.totals?.carbs_g ?? base?.nutrition?.carbs_g ?? 0,
-  };
-  const rawBreakdown =
-    base?.breakdown && typeof base.breakdown === 'object' ? base.breakdown : {};
-  const breakdown = {
-    ...rawBreakdown,
-    items: Array.isArray(rawBreakdown.items)
-      ? rawBreakdown.items
-      : Array.isArray(base.items)
-        ? base.items
-        : [],
-    warnings: Array.isArray(rawBreakdown.warnings)
-      ? rawBreakdown.warnings
-      : Array.isArray(base.warnings)
-        ? base.warnings
-        : [],
-  };
-  const items = Array.isArray(base.items) ? base.items : breakdown.items;
-  return {
-    ...base,
-    totals,
-    items,
-    breakdown,
-    nutrition: {
-      calories: totals.kcal,
-      protein_g: totals.protein_g,
-      fat_g: totals.fat_g,
-      carbs_g: totals.carbs_g,
-    },
-    meta: base.meta || {},
-  };
-}
-
 const { aiRawParseFail, chooseSlotMismatch } = require('./metrics/aiRaw');
 
 const METRIC_ENV =

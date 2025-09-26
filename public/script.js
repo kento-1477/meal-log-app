@@ -1,3 +1,4 @@
+/* exported addMessage */
 const ZERO_TOTALS = { kcal: 0, protein_g: 0, fat_g: 0, carbs_g: 0 };
 
 function extractTotals(analysis = {}) {

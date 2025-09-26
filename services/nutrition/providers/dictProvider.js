@@ -98,7 +98,13 @@ async function analyzeInternal(input, { useGemini }) {
       };
     }
   } else {
-    safeLog('[dictProvider] skip gemini', { text: input?.text });
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        console.debug('[dictProvider] skip gemini', { text: input?.text });
+      } catch (_e) {
+        /* noop */
+      }
+    }
     aiResult = {
       dish: input.text || '食事',
       items: [],
