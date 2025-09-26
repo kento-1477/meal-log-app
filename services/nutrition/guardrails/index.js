@@ -20,9 +20,19 @@ function createGuardrailRunner({ version } = {}) {
     });
 
     const warnings = Array.from(new Set(floored.warnings || []));
+    const legacyNutrition = {
+      calories: floored.totals.kcal,
+      protein_g: floored.totals.protein_g,
+      fat_g: floored.totals.fat_g,
+      carbs_g: floored.totals.carbs_g,
+    };
+    const legacyBreakdown = { items: floored.items, warnings };
+
     return {
       ...floored,
       warnings,
+      nutrition: legacyNutrition,
+      breakdown: legacyBreakdown,
       meta: {
         ...(floored.meta || {}),
         guardrail_version: guardrailVersion,
