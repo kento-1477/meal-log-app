@@ -32,6 +32,7 @@ console.log('[ai] boot config', {
   AI_PROVIDER: process.env.AI_PROVIDER,
   NUTRITION_PROVIDER: process.env.NUTRITION_PROVIDER,
   GEMINI_MODEL: process.env.GEMINI_MODEL,
+  GEMINI_FALLBACK_MODEL: process.env.GEMINI_FALLBACK_MODEL,
   GEMINI_KEY_tail: tail(process.env.GEMINI_API_KEY),
   ENABLE_AI_raw: process.env.ENABLE_AI,
   ENABLE_AI: toBool(process.env.ENABLE_AI),

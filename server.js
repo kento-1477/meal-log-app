@@ -965,33 +965,89 @@ app.get('/debug/ai', async (_req, res) => {
   const tail = (s) =>
     typeof s === 'string' && s.length ? s.slice(-6) : 'none';
   const key = process.env.GEMINI_API_KEY;
-  const modelId = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-
   if (!key) {
     return res
       .status(500)
       .json({ ok: false, message: 'GEMINI_API_KEY missing' });
   }
 
+  const primary =
+    process.env.GEMINI_MODEL || process.env.AI_MODEL || 'gemini-1.5-flash';
+  const fallback =
+    process.env.GEMINI_FALLBACK_MODEL || process.env.GEMINI_MODEL_FALLBACK;
+  const candidates = [primary, fallback].filter(
+    (value, index, arr) => value && arr.indexOf(value) === index,
+  );
+
+  const genAI = new GoogleGenerativeAI(key);
+  const attempts = [];
+  const list = candidates.length ? candidates : ['gemini-1.5-flash'];
+
+  for (let i = 0; i < list.length; i += 1) {
+    const modelId = list[i];
+    try {
+      const model = genAI.getGenerativeModel({ model: modelId });
+      const response = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+      });
+      const text = response?.response?.text?.();
+      attempts.push({
+        model: modelId,
+        ok: true,
+        textLen: typeof text === 'string' ? text.length : 0,
+      });
+      return res.json({
+        ok: true,
+        key_tail: tail(key),
+        attempts,
+        activeModel: modelId,
+      });
+    } catch (error) {
+      attempts.push({
+        model: modelId,
+        ok: false,
+        message: String(error?.message || error),
+      });
+      if (i === list.length - 1) {
+        return res.status(500).json({
+          ok: false,
+          key_tail: tail(key),
+          attempts,
+        });
+      }
+    }
+  }
+
+  return res.status(500).json({
+    ok: false,
+    key_tail: tail(key),
+    attempts,
+  });
+});
+
+app.get('/debug/ai/models', async (_req, res) => {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    return res
+      .status(500)
+      .json({ ok: false, message: 'GEMINI_API_KEY missing' });
+  }
   try {
-    const model = new GoogleGenerativeAI(key).getGenerativeModel({
-      model: modelId,
-    });
-    const response = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
-    });
-    const text = response?.response?.text?.();
-    res.json({
-      ok: true,
-      model: modelId,
-      key_tail: tail(key),
-      textLen: typeof text === 'string' ? text.length : 0,
-    });
+    const genAI = new GoogleGenerativeAI(key);
+    const pager = await genAI.listModels();
+    const models = [];
+    for await (const model of pager) {
+      models.push({
+        name: model.name,
+        displayName: model.displayName,
+        description: model.description,
+        supportedGenerationMethods: model.supportedGenerationMethods,
+      });
+    }
+    res.json({ ok: true, models });
   } catch (error) {
     res.status(500).json({
       ok: false,
-      model: modelId,
-      key_tail: tail(key),
       message: String(error?.message || error),
     });
   }
